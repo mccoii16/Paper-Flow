@@ -90,7 +90,8 @@ service cloud.firestore {
     function isValidConversation(data) {
       return data.keys().hasAll(['ownerUid', 'leadId', 'guestName', 'aiEnabled', 'leadStatus', 'channel']) &&
         data.keys().hasOnly([
-          'ownerUid', 'leadId', 'psid', 'guestName', 'messengerHandle',
+          'ownerUid', 'leadId', 'psid', 'guestName', 'firstName', 'lastName',
+          'profilePicUrl', 'profileFetchedAt', 'messengerHandle',
           'avatarInitials', 'avatarTone', 'aiEnabled', 'leadStatus', 'tags',
           'unreadCount', 'lastMessagePreview', 'lastMessageAt', 'channel',
           'assignedOperator', 'needsHumanHandoff'
@@ -102,6 +103,10 @@ service cloud.firestore {
         data.leadStatus in ['New Inquiry', 'Qualified', 'Proposal Sent', 'Booked', 'Needs Handoff', 'Archived'] &&
         data.channel in ['Messenger (Simulated)', 'Messenger (Live)'] &&
         (!('psid' in data) || isStringBounded(data.psid, 0, 128)) &&
+        (!('firstName' in data) || isStringBounded(data.firstName, 0, 80)) &&
+        (!('lastName' in data) || isStringBounded(data.lastName, 0, 80)) &&
+        (!('profilePicUrl' in data) || isStringBounded(data.profilePicUrl, 0, 1000)) &&
+        (!('profileFetchedAt' in data) || isStringBounded(data.profileFetchedAt, 0, 64)) &&
         (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
         (!('avatarInitials' in data) || isStringBounded(data.avatarInitials, 1, 4)) &&
         (!('avatarTone' in data) || data.avatarTone in ['pink', 'navy', 'slate', 'rose']) &&
@@ -152,7 +157,8 @@ service cloud.firestore {
     function isValidLead(data) {
       return data.keys().hasAll(['ownerUid', 'name', 'status', 'source']) &&
         data.keys().hasOnly([
-          'ownerUid', 'psid', 'name', 'messengerHandle', 'email', 'phone',
+          'ownerUid', 'psid', 'name', 'firstName', 'lastName',
+          'profilePicUrl', 'profileFetchedAt', 'messengerHandle', 'email', 'phone',
           'eventType', 'eventDate', 'venue', 'estimatedValuePhp', 'status',
           'tags', 'source', 'lastContactAt', 'notes'
         ]) &&
@@ -161,6 +167,10 @@ service cloud.firestore {
         data.status in ['New Inquiry', 'Qualified', 'Proposal Sent', 'Booked', 'Needs Handoff', 'Archived'] &&
         data.source in ['Messenger (Simulated)', 'Messenger (Live)', 'Instagram DM (Planned)', 'Manual Entry'] &&
         (!('psid' in data) || isStringBounded(data.psid, 0, 128)) &&
+        (!('firstName' in data) || isStringBounded(data.firstName, 0, 80)) &&
+        (!('lastName' in data) || isStringBounded(data.lastName, 0, 80)) &&
+        (!('profilePicUrl' in data) || isStringBounded(data.profilePicUrl, 0, 1000)) &&
+        (!('profileFetchedAt' in data) || isStringBounded(data.profileFetchedAt, 0, 64)) &&
         (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
         (!('email' in data) || isStringBounded(data.email, 0, 254)) &&
         (!('phone' in data) || isStringBounded(data.phone, 0, 40)) &&
@@ -216,16 +226,17 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerUid', 'conversationId', 'channel', 'outcome', 'createdAt']) &&
         data.keys().hasOnly([
           'ownerUid', 'conversationId', 'workflowId', 'workflowName',
-          'matchedKbTitle', 'channel', 'outcome', 'createdAt'
+          'matchedKbTitle', 'channel', 'outcome', 'errorMessage', 'createdAt'
         ]) &&
         isStringBounded(data.ownerUid, 1, 128) &&
         isStringBounded(data.conversationId, 1, 128) &&
         data.channel in ['Messenger (Simulated)', 'Messenger (Live)'] &&
-        data.outcome in ['replied', 'handoff', 'skipped_cooldown', 'skipped_duplicate', 'manual_only'] &&
+        data.outcome in ['replied', 'handoff', 'skipped_cooldown', 'skipped_duplicate', 'manual_only', 'error'] &&
         isStringBounded(data.createdAt, 1, 64) &&
         (!('workflowId' in data) || isStringBounded(data.workflowId, 0, 128)) &&
         (!('workflowName' in data) || isStringBounded(data.workflowName, 0, 140)) &&
-        (!('matchedKbTitle' in data) || isStringBounded(data.matchedKbTitle, 0, 160));
+        (!('matchedKbTitle' in data) || isStringBounded(data.matchedKbTitle, 0, 160)) &&
+        (!('errorMessage' in data) || isStringBounded(data.errorMessage, 0, 400));
     }
 
     // --- Collection Rules ---
@@ -288,7 +299,8 @@ service cloud.firestore {
           incoming().ownerUid == existing().ownerUid &&
           isWorkspaceOwnerOrMember(workspaceId) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'guestName', 'aiEnabled', 'leadStatus', 'tags', 'unreadCount',
+            'guestName', 'firstName', 'lastName', 'profilePicUrl', 'profileFetchedAt',
+            'avatarInitials', 'aiEnabled', 'leadStatus', 'tags', 'unreadCount',
             'lastMessagePreview', 'lastMessageAt', 'assignedOperator', 'needsHumanHandoff'
           ]);
         allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) &&
@@ -357,7 +369,8 @@ service cloud.firestore {
           incoming().ownerUid == existing().ownerUid &&
           isWorkspaceOwnerOrMember(workspaceId) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'messengerHandle', 'email', 'phone', 'eventType',
+            'name', 'firstName', 'lastName', 'profilePicUrl', 'profileFetchedAt',
+            'messengerHandle', 'email', 'phone', 'eventType',
             'eventDate', 'venue', 'estimatedValuePhp', 'status', 'tags',
             'lastContactAt', 'notes'
           ]);

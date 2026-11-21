@@ -38,14 +38,33 @@ import {
 const DEMO_STORAGE_KEY = 'paperflow_demo_workspace_v1';
 const DEMO_MODE_FLAG_KEY = 'paperflow_demo_mode_active_v1';
 
-function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
-  const clean: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val !== undefined) {
-      clean[key] = val;
-    }
+function omitUndefinedValue<T>(value: T): T {
+  if (value === null || value === undefined || value instanceof Date) {
+    return value;
   }
-  return clean as T;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => omitUndefinedValue(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      return value;
+    }
+    const clean: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (val !== undefined) {
+        clean[key] = omitUndefinedValue(val);
+      }
+    }
+    return clean as T;
+  }
+  return value;
+}
+
+function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return omitUndefinedValue(obj);
 }
 
 function sanitizeId(id: string): string {
@@ -466,6 +485,11 @@ export const paperflowRepository = {
           ref,
           omitUndefined({
             guestName: conversation.guestName,
+            firstName: conversation.firstName,
+            lastName: conversation.lastName,
+            profilePicUrl: conversation.profilePicUrl,
+            profileFetchedAt: conversation.profileFetchedAt,
+            avatarInitials: conversation.avatarInitials,
             aiEnabled: conversation.aiEnabled,
             leadStatus: conversation.leadStatus,
             tags: conversation.tags.slice(0, 20),
@@ -484,6 +508,10 @@ export const paperflowRepository = {
             leadId: conversation.leadId,
             psid: conversation.psid,
             guestName: conversation.guestName,
+            firstName: conversation.firstName,
+            lastName: conversation.lastName,
+            profilePicUrl: conversation.profilePicUrl,
+            profileFetchedAt: conversation.profileFetchedAt,
             messengerHandle: conversation.messengerHandle,
             avatarInitials: conversation.avatarInitials,
             avatarTone: conversation.avatarTone,
@@ -577,6 +605,10 @@ export const paperflowRepository = {
           ref,
           omitUndefined({
             name: lead.name.slice(0, 120),
+            firstName: lead.firstName?.slice(0, 80),
+            lastName: lead.lastName?.slice(0, 80),
+            profilePicUrl: lead.profilePicUrl?.slice(0, 1000),
+            profileFetchedAt: lead.profileFetchedAt?.slice(0, 64),
             messengerHandle: lead.messengerHandle.slice(0, 120),
             email: lead.email.slice(0, 254),
             phone: lead.phone.slice(0, 40),
@@ -597,6 +629,10 @@ export const paperflowRepository = {
             ownerUid: session.uid,
             psid: lead.psid,
             name: lead.name.slice(0, 120),
+            firstName: lead.firstName?.slice(0, 80),
+            lastName: lead.lastName?.slice(0, 80),
+            profilePicUrl: lead.profilePicUrl?.slice(0, 1000),
+            profileFetchedAt: lead.profileFetchedAt?.slice(0, 64),
             messengerHandle: lead.messengerHandle.slice(0, 120),
             email: lead.email.slice(0, 254),
             phone: lead.phone.slice(0, 40),
@@ -717,6 +753,7 @@ export const paperflowRepository = {
           matchedKbTitle: log.matchedKbTitle,
           channel: log.channel,
           outcome: log.outcome,
+          errorMessage: log.errorMessage?.slice(0, 400),
           createdAt: log.createdAt,
         })
       );

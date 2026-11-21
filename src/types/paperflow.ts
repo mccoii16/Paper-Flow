@@ -41,6 +41,10 @@ export interface Conversation {
   leadId: string;
   psid?: string;
   guestName: string;
+  firstName?: string;
+  lastName?: string;
+  profilePicUrl?: string;
+  profileFetchedAt?: string;
   messengerHandle: string;
   avatarInitials: string;
   avatarTone: 'pink' | 'navy' | 'slate' | 'rose';
@@ -119,6 +123,10 @@ export interface Lead {
   ownerUid?: string;
   psid?: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
+  profilePicUrl?: string;
+  profileFetchedAt?: string;
   messengerHandle: string;
   email: string;
   phone: string;
@@ -175,7 +183,14 @@ export interface AutomationLog {
   workflowName?: string;
   matchedKbTitle?: string;
   channel: MessengerChannel;
-  outcome: 'replied' | 'handoff' | 'skipped_cooldown' | 'skipped_duplicate' | 'manual_only';
+  outcome:
+    | 'replied'
+    | 'handoff'
+    | 'skipped_cooldown'
+    | 'skipped_duplicate'
+    | 'manual_only'
+    | 'error';
+  errorMessage?: string;
   createdAt: string;
 }
 

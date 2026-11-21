@@ -1,22 +1,81 @@
-import { cert, getApp, getApps, initializeApp, type ServiceAccount } from 'firebase-admin/app';
+import {
+  applicationDefault,
+  cert,
+  getApp,
+  getApps,
+  initializeApp,
+  type ServiceAccount,
+} from 'firebase-admin/app';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getFirebaseRuntimeConfig } from './firebaseConfig.js';
 
 export { getFirebaseRuntimeConfig };
 
-function parseServiceAccountFromEnv(): ServiceAccount | null {
+interface RawServiceAccountJson {
+  project_id?: unknown;
+  projectId?: unknown;
+  client_email?: unknown;
+  clientEmail?: unknown;
+  private_key?: unknown;
+  privateKey?: unknown;
+}
+
+/**
+ * Strictly parses FIREBASE_SERVICE_ACCOUNT_JSON into a minimal ServiceAccount
+ * containing only projectId, clientEmail, and privateKey.
+ */
+function parseServiceAccountFromEnv(fallbackProjectId: string): ServiceAccount | null {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (!raw) return null;
+
+  let parsed: RawServiceAccountJson;
   try {
-    const parsed = JSON.parse(raw) as ServiceAccount & { private_key?: string };
-    if (typeof parsed.private_key === 'string' && !parsed.private_key.includes('\n')) {
-      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
-    }
-    return parsed;
+    parsed = JSON.parse(raw) as RawServiceAccountJson;
   } catch {
     throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT_JSON environment variable.');
   }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON must be a JSON object.');
+  }
+
+  const clientEmail =
+    typeof parsed.client_email === 'string'
+      ? parsed.client_email.trim()
+      : typeof parsed.clientEmail === 'string'
+      ? parsed.clientEmail.trim()
+      : '';
+
+  const rawPrivateKey =
+    typeof parsed.private_key === 'string'
+      ? parsed.private_key
+      : typeof parsed.privateKey === 'string'
+      ? parsed.privateKey
+      : '';
+
+  const privateKey = rawPrivateKey.includes('\n')
+    ? rawPrivateKey
+    : rawPrivateKey.replace(/\\n/g, '\n');
+
+  const projectId =
+    typeof parsed.project_id === 'string' && parsed.project_id.trim()
+      ? parsed.project_id.trim()
+      : typeof parsed.projectId === 'string' && parsed.projectId.trim()
+      ? parsed.projectId.trim()
+      : fallbackProjectId;
+
+  if (!clientEmail || !privateKey) {
+    throw new Error(
+      'FIREBASE_SERVICE_ACCOUNT_JSON is missing required client_email or private_key fields.'
+    );
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey,
+  };
 }
 
 function getOrInitAdminApp() {
@@ -27,7 +86,7 @@ function getOrInitAdminApp() {
   if (getApps().length > 0) {
     return getApp();
   }
-  const serviceAccount = parseServiceAccountFromEnv();
+  const serviceAccount = parseServiceAccountFromEnv(config.projectId);
   if (serviceAccount) {
     return initializeApp({
       credential: cert(serviceAccount),
@@ -35,6 +94,7 @@ function getOrInitAdminApp() {
     });
   }
   return initializeApp({
+    credential: applicationDefault(),
     projectId: config.projectId,
   });
 }

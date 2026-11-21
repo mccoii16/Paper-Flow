@@ -543,16 +543,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await paperflowRepository.appendMessage(session, guestMsg);
         if (aiMsg) {
           await paperflowRepository.appendMessage(session, aiMsg);
-          await paperflowRepository.logAutomationRun(session, {
-            id: `log_${Date.now()}`,
-            ownerUid: session.uid,
-            conversationId,
-            workflowName: aiMsg.matchedWorkflowName,
-            matchedKbTitle: aiMsg.matchedKbTitle,
-            channel: 'Messenger (Simulated)',
-            outcome: nextHandoff ? 'handoff' : 'replied',
-            createdAt: replyNow,
-          });
         }
         await paperflowRepository.saveConversationMeta(session, {
           ...targetConv,
@@ -563,6 +553,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lastMessagePreview: lastPreview,
           lastMessageAt: lastAt,
         });
+        if (aiMsg) {
+          try {
+            await paperflowRepository.logAutomationRun(session, {
+              id: `log_${Date.now()}`,
+              ownerUid: session.uid,
+              conversationId,
+              workflowName: aiMsg.matchedWorkflowName,
+              matchedKbTitle: aiMsg.matchedKbTitle,
+              channel: 'Messenger (Simulated)',
+              outcome: nextHandoff ? 'handoff' : 'replied',
+              createdAt: replyNow,
+            });
+          } catch (logErr) {
+            console.warn('Simulated automation log write failed (message preserved):', logErr);
+          }
+        }
       }
     },
     [session, workspace, isDemoMode, updateDemoWorkspace]

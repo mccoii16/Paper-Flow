@@ -182,7 +182,12 @@ export function OverviewPage() {
                     className="w-full text-left px-5 py-3.5 hover:bg-pink-50/40 dark:hover:bg-slate-800/40 transition-colors flex items-start justify-between gap-4"
                   >
                     <div className="flex items-start gap-3 min-w-0">
-                      <AvatarMonogram initials={conv.avatarInitials} tone={conv.avatarTone} />
+                      <AvatarMonogram
+                        initials={conv.avatarInitials}
+                        tone={conv.avatarTone}
+                        imageUrl={conv.profilePicUrl}
+                        alt={conv.guestName}
+                      />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-[#0F172A] dark:text-white truncate">

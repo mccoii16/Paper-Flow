@@ -201,7 +201,12 @@ export function InboxPage() {
                       : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/30'
                   }`}
                 >
-                  <AvatarMonogram initials={conv.avatarInitials} tone={conv.avatarTone} />
+                  <AvatarMonogram
+                    initials={conv.avatarInitials}
+                    tone={conv.avatarTone}
+                    imageUrl={conv.profilePicUrl}
+                    alt={conv.guestName}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-[#0F172A] dark:text-white truncate">
@@ -249,13 +254,21 @@ export function InboxPage() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
-                <AvatarMonogram initials={activeConv.avatarInitials} tone={activeConv.avatarTone} />
+                <AvatarMonogram
+                  initials={activeConv.avatarInitials}
+                  tone={activeConv.avatarTone}
+                  imageUrl={activeConv.profilePicUrl}
+                  alt={activeConv.guestName}
+                />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-[#0F172A] dark:text-white truncate">
                     {activeConv.guestName}
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                    @{activeConv.messengerHandle} · {activeConv.channel}
+                    {activeConv.messengerHandle.startsWith('psid:')
+                      ? `Messenger ID …${activeConv.messengerHandle.slice(-4)}`
+                      : `@${activeConv.messengerHandle}`}{' '}
+                    · {activeConv.channel}
                   </div>
                 </div>
               </div>

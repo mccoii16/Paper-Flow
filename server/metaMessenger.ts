@@ -1,9 +1,7 @@
+import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminFirestore } from './firebaseAdmin.js';
-import {
-  buildSimulatedAutoReply,
-} from '../src/utils/automationEngine.js';
+import { buildSimulatedAutoReply } from '../src/utils/automationEngine.js';
 import type {
-  AutomationLog,
   Booking,
   Conversation,
   KnowledgeBaseItem,
@@ -17,14 +15,59 @@ import {
   evaluateWebhookSafeguards,
   type MetaMessagingEvent,
 } from './webhookSafeguards.js';
+import {
+  buildAutomationLogDoc,
+  buildAvatarInitials,
+  buildFallbackGuestName,
+  buildReplyMessageDoc,
+  isFallbackGuestName,
+  sanitizeFirestoreData,
+} from './firestoreSanitizer.js';
+import {
+  fetchMessengerUserProfile,
+  shouldFetchMessengerProfile,
+} from './metaProfile.js';
+
+interface ProfileAttemptRecord {
+  attemptedAtMs: number;
+  rateLimited: boolean;
+}
 
 const RECENT_DEDUP_CACHE = new Map<string, number>();
 const RECENT_AUTOREPLY_BY_PSID = new Map<string, number>();
+const RECENT_PROFILE_ATTEMPT_BY_PSID = new Map<string, ProfileAttemptRecord>();
 
 function cleanExpiredCache(map: Map<string, number>, maxAgeMs: number, nowMs: number) {
   for (const [k, ts] of map.entries()) {
     if (nowMs - ts > maxAgeMs) map.delete(k);
   }
+}
+
+function cleanExpiredProfileAttempts(nowMs: number) {
+  for (const [k, rec] of RECENT_PROFILE_ATTEMPT_BY_PSID.entries()) {
+    const maxAge = rec.rateLimited ? 60 * 60_000 : 15 * 60_000;
+    if (nowMs - rec.attemptedAtMs > maxAge) {
+      RECENT_PROFILE_ATTEMPT_BY_PSID.delete(k);
+    }
+  }
+}
+
+export function resetMetaMessengerCachesForTests(): void {
+  RECENT_DEDUP_CACHE.clear();
+  RECENT_AUTOREPLY_BY_PSID.clear();
+  RECENT_PROFILE_ATTEMPT_BY_PSID.clear();
+}
+
+function isFirestoreAlreadyExistsError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const record = err as { code?: unknown; message?: unknown };
+  if (record.code === 6 || record.code === 'already-exists' || record.code === 'ALREADY_EXISTS') {
+    return true;
+  }
+  if (typeof record.message === 'string' && /already exists/i.test(record.message)) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -33,17 +76,28 @@ function cleanExpiredCache(map: Map<string, number>, maxAgeMs: number, nowMs: nu
 export async function sendMetaMessengerMessage(params: {
   recipientPsid: string;
   text: string;
+  pageAccessToken?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<{ messageId: string }> {
-  const pageToken = process.env.META_PAGE_ACCESS_TOKEN;
+  const pageToken = params.pageAccessToken ?? process.env.META_PAGE_ACCESS_TOKEN;
   if (!pageToken) {
     throw new Error('META_PAGE_ACCESS_TOKEN is not configured on the server.');
   }
 
-  const response = await fetch(
+  const fetchFn = params.fetchImpl ?? fetch;
+  const timeoutMs = params.timeoutMs ?? 8000;
+  const signal =
+    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(timeoutMs)
+      : undefined;
+
+  const response = await fetchFn(
     `https://graph.facebook.com/v21.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify({
         messaging_type: 'RESPONSE',
         recipient: { id: params.recipientPsid },
@@ -70,50 +124,116 @@ function getWorkspaceId(): string {
   return process.env.PAPERFLOW_WORKSPACE_ID || 'paper-dreams-cebu';
 }
 
+export interface ProcessMetaEventDeps {
+  db?: Firestore;
+  fetchImpl?: typeof fetch;
+  pageAccessToken?: string;
+  pageId?: string;
+  workspaceId?: string;
+  nowMs?: number;
+}
+
 /**
- * Processes an incoming Meta Messenger webhook event:
- * 1. Runs anti-loop, duplicate mid, and cooldown safeguards
- * 2. Saves guest message + lead/contact to Firestore
- * 3. Checks for booking inquiry keywords and saves booking inquiry if detected
- * 4. Evaluates active Firestore workflows & Knowledge Base, sends auto-reply via Send API,
- *    and records automationLogs + sent message in Firestore.
+ * Processes an incoming Meta Messenger webhook event reliably:
+ * 1. Runs anti-loop, duplicate mid (atomic Firestore create), and cooldown safeguards
+ * 2. Resolves sender display name & profile picture via Meta User Profile API (with caching + fallback)
+ * 3. Persists customer lead, conversation, and incoming message FIRST (sanitized, zero undefined fields)
+ * 4. Runs optional booking inquiry detection, automation evaluation, Meta Send API auto-reply,
+ *    and automationLogs writes in isolated try/catch blocks so secondary failures never lose messages.
  */
-export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promise<{
+export async function processIncomingMetaEvent(
+  event: MetaMessagingEvent,
+  deps?: ProcessMetaEventDeps
+): Promise<{
   status: string;
   psid?: string;
 }> {
-  const nowMs = Date.now();
+  const nowMs = deps?.nowMs ?? Date.now();
   const nowIso = new Date(nowMs).toISOString();
   cleanExpiredCache(RECENT_DEDUP_CACHE, 10 * 60_000, nowMs);
   cleanExpiredCache(RECENT_AUTOREPLY_BY_PSID, 60_000, nowMs);
+  cleanExpiredProfileAttempts(nowMs);
 
-  const db = getAdminFirestore();
-  const workspaceId = getWorkspaceId();
+  const pageId = deps?.pageId ?? process.env.META_PAGE_ID;
+  const pageAccessToken = deps?.pageAccessToken ?? process.env.META_PAGE_ACCESS_TOKEN;
+
+  // Fast pre-check before touching Firestore (echoes, page self-messages, empty events)
+  const dedupCandidate = buildWebhookDedupKey(event);
+  const inMemoryDuplicate = Boolean(dedupCandidate && RECENT_DEDUP_CACHE.has(dedupCandidate));
+
+  const preCheck = evaluateWebhookSafeguards({
+    event,
+    pageId,
+    alreadyProcessed: inMemoryDuplicate,
+    conversationAiEnabled: true,
+    needsHumanHandoff: false,
+    nowMs,
+  });
+
+  const psid = event.sender?.id?.trim() || '';
+  if (!preCheck.allowProcess) {
+    return { status: preCheck.reason, psid: psid || undefined };
+  }
+
+  const db = deps?.db ?? getAdminFirestore();
+  const workspaceId = deps?.workspaceId ?? getWorkspaceId();
   const wsRef = db.collection('workspaces').doc(workspaceId);
 
-  const dedupCandidate = buildWebhookDedupKey(event);
-  let alreadyProcessed = Boolean(dedupCandidate && RECENT_DEDUP_CACHE.has(dedupCandidate));
-
-  if (!alreadyProcessed && dedupCandidate) {
-    const dedupSnap = await wsRef.collection('webhookDedup').doc(dedupCandidate).get();
-    if (dedupSnap.exists) {
-      alreadyProcessed = true;
+  // Atomic Firestore deduplication guard so concurrent Vercel invocations never double-process
+  if (preCheck.dedupKey) {
+    const dedupRef = wsRef.collection('webhookDedup').doc(preCheck.dedupKey);
+    const dedupPayload = sanitizeFirestoreData({
+      eventId: preCheck.dedupKey.slice(0, 200),
+      psid: psid.slice(0, 128),
+      processedAt: nowIso,
+    });
+    try {
+      if (typeof dedupRef.create === 'function') {
+        await dedupRef.create(dedupPayload);
+      } else {
+        const existingDedup = await dedupRef.get();
+        if (existingDedup.exists) {
+          RECENT_DEDUP_CACHE.set(preCheck.dedupKey, nowMs);
+          return { status: 'duplicate_mid', psid };
+        }
+        await dedupRef.set(dedupPayload);
+      }
+      RECENT_DEDUP_CACHE.set(preCheck.dedupKey, nowMs);
+    } catch (err) {
+      if (isFirestoreAlreadyExistsError(err)) {
+        RECENT_DEDUP_CACHE.set(preCheck.dedupKey, nowMs);
+        return { status: 'duplicate_mid', psid };
+      }
+      console.error('Meta webhook dedup write warning (continuing safely):', err);
     }
   }
 
-  const psid = event.sender?.id || '';
-  const convId = psid ? `meta_${psid.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-  const convRef = convId ? wsRef.collection('conversations').doc(convId) : null;
-  const convSnap = convRef ? await convRef.get() : null;
-  const existingConv = convSnap?.exists ? (convSnap.data() as Omit<Conversation, 'messages'>) : null;
+  const convId = `meta_${psid.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  const convRef = wsRef.collection('conversations').doc(convId);
+  const leadId = `lead_${convId}`;
+  const leadRef = wsRef.collection('leads').doc(leadId);
 
+  const [wsSnap, convSnap, leadSnap] = await Promise.all([
+    wsRef.get(),
+    convRef.get(),
+    leadRef.get(),
+  ]);
+
+  const wsProfile = wsSnap.exists ? (wsSnap.data() as WorkspaceProfile) : null;
+  const ownerUid = wsProfile?.ownerUid || 'studio-admin';
+  const existingConv = convSnap.exists
+    ? (convSnap.data() as Omit<Conversation, 'id' | 'messages'>)
+    : null;
+  const existingLead = leadSnap.exists ? (leadSnap.data() as Omit<Lead, 'id'>) : null;
+
+  // Evaluate conversation-level safeguards (AI pause, handoff, auto-reply cooldown)
   const safeguard = evaluateWebhookSafeguards({
     event,
-    pageId: process.env.META_PAGE_ID,
-    alreadyProcessed,
+    pageId,
+    alreadyProcessed: false,
     conversationAiEnabled: existingConv ? existingConv.aiEnabled : true,
     needsHumanHandoff: existingConv ? existingConv.needsHumanHandoff : false,
-    lastAutoReplyAtMs: psid ? RECENT_AUTOREPLY_BY_PSID.get(psid) : undefined,
+    lastAutoReplyAtMs: RECENT_AUTOREPLY_BY_PSID.get(psid),
     nowMs,
   });
 
@@ -121,41 +241,84 @@ export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promi
     return { status: safeguard.reason, psid };
   }
 
-  if (safeguard.dedupKey) {
-    RECENT_DEDUP_CACHE.set(safeguard.dedupKey, nowMs);
-    await wsRef.collection('webhookDedup').doc(safeguard.dedupKey).set({
-      eventId: safeguard.dedupKey,
-      psid,
-      processedAt: nowIso,
-    });
-  }
-
-  const wsSnap = await wsRef.get();
-  const wsProfile = wsSnap.exists ? (wsSnap.data() as WorkspaceProfile) : null;
-  const ownerUid = wsProfile?.ownerUid || 'studio-admin';
-
   const incomingText =
     event.message?.text?.trim() ||
     event.postback?.title?.trim() ||
     event.postback?.payload?.trim() ||
     '';
 
-  const leadId = `lead_${convId}`;
-  const leadRef = wsRef.collection('leads').doc(leadId);
-  const leadSnap = await leadRef.get();
+  // Step 2: Resolve Messenger contact profile via Graph API when allowed & needed
+  const currentKnownName =
+    (!isFallbackGuestName(existingConv?.guestName) ? existingConv?.guestName : undefined) ??
+    (!isFallbackGuestName(existingLead?.name) ? existingLead?.name : undefined) ??
+    existingConv?.guestName ??
+    existingLead?.name;
 
-  const guestDisplayName =
-    existingConv?.guestName ||
-    (leadSnap.exists ? (leadSnap.data() as Lead).name : null) ||
-    `Messenger Guest ${psid.slice(-4)}`;
+  const existingProfileFetchedAt =
+    existingConv?.profileFetchedAt ?? existingLead?.profileFetchedAt;
+  const existingProfilePicUrl =
+    existingConv?.profilePicUrl ?? existingLead?.profilePicUrl;
+  const lastAttempt = RECENT_PROFILE_ATTEMPT_BY_PSID.get(psid);
 
-  if (!leadSnap.exists) {
-    const newLead: Lead = {
-      id: leadId,
+  let resolvedFirstName = existingConv?.firstName ?? existingLead?.firstName;
+  let resolvedLastName = existingConv?.lastName ?? existingLead?.lastName;
+  let resolvedProfilePicUrl = existingProfilePicUrl;
+  let resolvedProfileFetchedAt = existingProfileFetchedAt;
+  let guestDisplayName = currentKnownName || buildFallbackGuestName(psid);
+
+  const needsProfileFetch = shouldFetchMessengerProfile({
+    existingName: currentKnownName,
+    existingProfilePicUrl,
+    existingProfileFetchedAt,
+    lastAttemptAtMs: lastAttempt?.attemptedAtMs,
+    lastAttemptRateLimited: lastAttempt?.rateLimited,
+    nowMs,
+  });
+
+  if (needsProfileFetch && pageAccessToken) {
+    const profileResult = await fetchMessengerUserProfile({
+      psid,
+      pageAccessToken,
+      pageId,
+      fetchImpl: deps?.fetchImpl,
+    });
+
+    RECENT_PROFILE_ATTEMPT_BY_PSID.set(psid, {
+      attemptedAtMs: nowMs,
+      rateLimited: profileResult.status === 'rate_limited',
+    });
+
+    if (profileResult.status === 'ok' && profileResult.profile) {
+      const p = profileResult.profile;
+      if (!isFallbackGuestName(p.displayName)) {
+        guestDisplayName = p.displayName;
+      }
+      if (p.firstName) resolvedFirstName = p.firstName;
+      if (p.lastName) resolvedLastName = p.lastName;
+      if (p.profilePicUrl) resolvedProfilePicUrl = p.profilePicUrl;
+      resolvedProfileFetchedAt = nowIso;
+    } else if (profileResult.status === 'permission_denied' || profileResult.status === 'rate_limited') {
+      console.warn(
+        `Meta User Profile API (${profileResult.status}) for PSID ...${psid.slice(-4)}: ${
+          profileResult.reason || 'Unavailable'
+        }`
+      );
+    }
+  }
+
+  const avatarInitials = buildAvatarInitials(guestDisplayName);
+
+  // Step 3: Persist Lead, Conversation, and Incoming Message FIRST (sanitized, no undefined values, no extra `id` field)
+  if (!existingLead) {
+    const newLeadDoc = sanitizeFirestoreData<Omit<Lead, 'id'>>({
       ownerUid,
       psid,
-      name: guestDisplayName,
-      messengerHandle: `psid:${psid}`,
+      name: guestDisplayName.slice(0, 120),
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      profilePicUrl: resolvedProfilePicUrl,
+      profileFetchedAt: resolvedProfileFetchedAt,
+      messengerHandle: `psid:${psid}`.slice(0, 120),
       email: '',
       phone: '',
       eventType: 'Messenger Inquiry',
@@ -167,28 +330,40 @@ export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promi
       source: 'Messenger (Live)',
       lastContactAt: nowIso,
       notes: 'Captured automatically via Meta Messenger webhook.',
-    };
-    await leadRef.set(newLead);
+    });
+    await leadRef.set(newLeadDoc);
   } else {
-    await leadRef.update({ lastContactAt: nowIso });
+    const leadPatch: Record<string, unknown> = { lastContactAt: nowIso };
+    if (isFallbackGuestName(existingLead.name) && !isFallbackGuestName(guestDisplayName)) {
+      leadPatch.name = guestDisplayName.slice(0, 120);
+    }
+    if (resolvedFirstName && resolvedFirstName !== existingLead.firstName) {
+      leadPatch.firstName = resolvedFirstName;
+    }
+    if (resolvedLastName && resolvedLastName !== existingLead.lastName) {
+      leadPatch.lastName = resolvedLastName;
+    }
+    if (resolvedProfilePicUrl && resolvedProfilePicUrl !== existingLead.profilePicUrl) {
+      leadPatch.profilePicUrl = resolvedProfilePicUrl;
+    }
+    if (resolvedProfileFetchedAt && resolvedProfileFetchedAt !== existingLead.profileFetchedAt) {
+      leadPatch.profileFetchedAt = resolvedProfileFetchedAt;
+    }
+    await leadRef.update(sanitizeFirestoreData(leadPatch));
   }
 
-  if (!existingConv && convRef) {
-    const initials = guestDisplayName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'MG';
-
-    const newConv: Omit<Conversation, 'messages'> = {
-      id: convId,
+  if (!existingConv) {
+    const newConvDoc = sanitizeFirestoreData<Omit<Conversation, 'id' | 'messages'>>({
       ownerUid,
       leadId,
       psid,
-      guestName: guestDisplayName,
-      messengerHandle: `psid:${psid}`,
-      avatarInitials: initials,
+      guestName: guestDisplayName.slice(0, 120),
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      profilePicUrl: resolvedProfilePicUrl,
+      profileFetchedAt: resolvedProfileFetchedAt,
+      messengerHandle: `psid:${psid}`.slice(0, 120),
+      avatarInitials,
       avatarTone: 'pink',
       aiEnabled: true,
       leadStatus: 'New Inquiry',
@@ -198,58 +373,90 @@ export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promi
       lastMessageAt: nowIso,
       channel: 'Messenger (Live)',
       needsHumanHandoff: false,
-    };
-    await convRef.set(newConv);
-  } else if (convRef && existingConv) {
-    await convRef.update({
+    });
+    await convRef.set(newConvDoc);
+  } else {
+    const convPatch: Record<string, unknown> = {
       unreadCount: (existingConv.unreadCount || 0) + 1,
       lastMessagePreview: incomingText.slice(0, 500),
       lastMessageAt: nowIso,
-    });
+    };
+    if (isFallbackGuestName(existingConv.guestName) && !isFallbackGuestName(guestDisplayName)) {
+      convPatch.guestName = guestDisplayName.slice(0, 120);
+      convPatch.avatarInitials = avatarInitials;
+    }
+    if (resolvedFirstName && resolvedFirstName !== existingConv.firstName) {
+      convPatch.firstName = resolvedFirstName;
+    }
+    if (resolvedLastName && resolvedLastName !== existingConv.lastName) {
+      convPatch.lastName = resolvedLastName;
+    }
+    if (resolvedProfilePicUrl && resolvedProfilePicUrl !== existingConv.profilePicUrl) {
+      convPatch.profilePicUrl = resolvedProfilePicUrl;
+    }
+    if (resolvedProfileFetchedAt && resolvedProfileFetchedAt !== existingConv.profileFetchedAt) {
+      convPatch.profileFetchedAt = resolvedProfileFetchedAt;
+    }
+    await convRef.update(sanitizeFirestoreData(convPatch));
   }
 
-  const incomingMsgId = safeguard.dedupKey || `msg_${nowMs}`;
-  const incomingMessage: Message = {
-    id: incomingMsgId,
+  const incomingMsgId = preCheck.dedupKey || `msg_${nowMs}`;
+  const incomingMessageDoc = buildReplyMessageDoc({
     ownerUid,
     conversationId: convId,
-    externalMid: event.message?.mid || '',
+    externalMid: event.message?.mid,
     sender: 'guest',
     senderName: guestDisplayName,
     text: incomingText,
     timestamp: nowIso,
     isSimulated: false,
-  };
-  await convRef?.collection('messages').doc(incomingMsgId).set(incomingMessage);
+  });
+  await convRef.collection('messages').doc(incomingMsgId).set(incomingMessageDoc);
 
-  // Detect booking inquiry keywords and store in Firestore bookings collection
+  // Helper to record automationLogs safely without ever aborting webhook handling
+  const safeWriteAutomationLog = async (
+    logId: string,
+    payload: Parameters<typeof buildAutomationLogDoc>[0]
+  ) => {
+    try {
+      const cleanLog = buildAutomationLogDoc(payload);
+      await wsRef.collection('automationLogs').doc(logId).set(cleanLog);
+    } catch (logErr) {
+      console.error('Failed to write automationLogs entry (non-fatal):', logErr);
+    }
+  };
+
+  // Step 4a: Optional booking inquiry detection (isolated so failure never loses message)
   if (/\b(book|booking|reserve|reservation|date|availab)\b/i.test(incomingText)) {
-    const bookingId = `bk_inq_${convId}`;
-    const bookingRef = wsRef.collection('bookings').doc(bookingId);
-    const bkSnap = await bookingRef.get();
-    if (!bkSnap.exists) {
-      const bookingInquiry: Booking = {
-        id: bookingId,
-        ownerUid,
-        leadId,
-        clientName: guestDisplayName,
-        eventTitle: `Messenger Booking Inquiry (${guestDisplayName})`,
-        packageName: 'Package Pending Confirmation',
-        eventDate: '',
-        eventTime: '',
-        venue: 'Cebu (Pending)',
-        totalPhp: 0,
-        depositPaidPhp: 0,
-        status: 'Pending Deposit',
-        notes: `Initial inquiry message: "${incomingText.slice(0, 300)}"`,
-      };
-      await bookingRef.set(bookingInquiry);
+    try {
+      const bookingId = `bk_inq_${convId}`;
+      const bookingRef = wsRef.collection('bookings').doc(bookingId);
+      const bkSnap = await bookingRef.get();
+      if (!bkSnap.exists) {
+        const bookingDoc = sanitizeFirestoreData<Omit<Booking, 'id'>>({
+          ownerUid,
+          leadId,
+          clientName: guestDisplayName.slice(0, 120),
+          eventTitle: `Messenger Booking Inquiry (${guestDisplayName})`.slice(0, 160),
+          packageName: 'Package Pending Confirmation',
+          eventDate: '',
+          eventTime: '',
+          venue: 'Cebu (Pending)',
+          totalPhp: 0,
+          depositPaidPhp: 0,
+          status: 'Pending Deposit',
+          notes: `Initial inquiry message: "${incomingText.slice(0, 300)}"`,
+        });
+        await bookingRef.set(bookingDoc);
+      }
+    } catch (bookingErr) {
+      console.error('Booking inquiry creation failed (non-fatal):', bookingErr);
     }
   }
 
+  // Step 4b: Respect manual-only / handoff / cooldown safeguards
   if (!safeguard.allowAutoReply) {
-    const skipLog: AutomationLog = {
-      id: `log_${nowMs}`,
+    await safeWriteAutomationLog(`log_${nowMs}`, {
       ownerUid,
       conversationId: convId,
       channel: 'Messenger (Live)',
@@ -258,61 +465,83 @@ export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promi
           ? 'skipped_cooldown'
           : 'manual_only',
       createdAt: nowIso,
-    };
-    await wsRef.collection('automationLogs').doc(skipLog.id).set(skipLog);
+    });
     return { status: safeguard.reason, psid };
   }
 
-  // Load Workflows & Knowledge Base from Firestore to build automated reply
-  const [wfSnaps, kbSnaps] = await Promise.all([
-    wsRef.collection('workflows').get(),
-    wsRef.collection('knowledgeBase').get(),
-  ]);
+  // Step 4c: Optional automation evaluation & Meta Send API auto-reply (isolated)
+  if (!pageAccessToken) {
+    return { status: 'saved_no_send_token', psid };
+  }
 
-  const workflows = wfSnaps.docs.map((d) => d.data() as Workflow);
-  const knowledgeBase = kbSnaps.docs.map((d) => d.data() as KnowledgeBaseItem);
+  let matchedWorkflowId: string | undefined;
+  let matchedWorkflowName: string | undefined;
+  let matchedKbTitle: string | undefined;
 
-  const convContext: Conversation = {
-    id: convId,
-    ownerUid,
-    leadId,
-    psid,
-    guestName: guestDisplayName,
-    messengerHandle: `psid:${psid}`,
-    avatarInitials: 'MG',
-    avatarTone: 'pink',
-    aiEnabled: true,
-    leadStatus: existingConv?.leadStatus ?? 'New Inquiry',
-    tags: existingConv?.tags ?? ['Live Messenger'],
-    unreadCount: 0,
-    lastMessagePreview: incomingText,
-    lastMessageAt: nowIso,
-    channel: 'Messenger (Live)',
-    needsHumanHandoff: false,
-    messages: [],
-  };
+  try {
+    const [wfSnaps, kbSnaps] = await Promise.all([
+      wsRef.collection('workflows').get(),
+      wsRef.collection('knowledgeBase').get(),
+    ]);
 
-  const replyPlan = buildSimulatedAutoReply({
-    conversation: convContext,
-    incomingText,
-    workflows,
-    knowledgeBase,
-    fallbackMessage:
-      wsProfile?.defaultAiFallbackMessage ||
-      'Thank you for messaging Paper Dreams Cebu! Our studio coordinator will review your event details shortly.',
-  });
+    const workflows = wfSnaps.docs.map(
+      (d) => ({ ...(d.data() as Omit<Workflow, 'id'>), id: d.id }) as Workflow
+    );
+    const knowledgeBase = kbSnaps.docs.map(
+      (d) => ({ ...(d.data() as Omit<KnowledgeBaseItem, 'id'>), id: d.id }) as KnowledgeBaseItem
+    );
 
-  if (process.env.META_PAGE_ACCESS_TOKEN) {
+    const convContext: Conversation = {
+      id: convId,
+      ownerUid,
+      leadId,
+      psid,
+      guestName: guestDisplayName,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      profilePicUrl: resolvedProfilePicUrl,
+      profileFetchedAt: resolvedProfileFetchedAt,
+      messengerHandle: `psid:${psid}`,
+      avatarInitials,
+      avatarTone: existingConv?.avatarTone ?? 'pink',
+      aiEnabled: true,
+      leadStatus: existingConv?.leadStatus ?? 'New Inquiry',
+      tags: existingConv?.tags ?? ['Live Messenger'],
+      unreadCount: 0,
+      lastMessagePreview: incomingText,
+      lastMessageAt: nowIso,
+      channel: 'Messenger (Live)',
+      needsHumanHandoff: false,
+      messages: [],
+    };
+
+    const replyPlan = buildSimulatedAutoReply({
+      conversation: convContext,
+      incomingText,
+      workflows,
+      knowledgeBase,
+      fallbackMessage:
+        wsProfile?.defaultAiFallbackMessage ||
+        'Thank you for messaging Paper Dreams Cebu! Our studio coordinator will review your event details shortly.',
+    });
+
+    matchedWorkflowId = replyPlan.matchedWorkflow?.id;
+    matchedWorkflowName = replyPlan.matchedWorkflow?.name;
+    matchedKbTitle = replyPlan.matchedKbItem?.title;
+
     RECENT_AUTOREPLY_BY_PSID.set(psid, Date.now());
     const sent = await sendMetaMessengerMessage({
       recipientPsid: psid,
       text: replyPlan.replyText,
+      pageAccessToken,
+      fetchImpl: deps?.fetchImpl,
     });
 
-    const replyTs = new Date().toISOString();
-    const replyMsgId = `msg_ai_${Date.now()}`;
-    const replyMessage: Message = {
-      id: replyMsgId,
+    const replyMs = Date.now();
+    const replyTs = new Date(replyMs).toISOString();
+    const replyMsgId = `msg_ai_${replyMs}`;
+
+    const replyMessageDoc: Omit<Message, 'id'> = buildReplyMessageDoc({
       ownerUid,
       conversationId: convId,
       externalMid: sent.messageId,
@@ -321,39 +550,59 @@ export async function processIncomingMetaEvent(event: MetaMessagingEvent): Promi
       text: replyPlan.replyText,
       timestamp: replyTs,
       isSimulated: false,
-      matchedKbTitle: replyPlan.matchedKbItem?.title,
-      matchedWorkflowName: replyPlan.matchedWorkflow?.name,
-    };
-
-    await convRef?.collection('messages').doc(replyMsgId).set(replyMessage);
-    await convRef?.update({
-      lastMessagePreview: replyPlan.replyText.slice(0, 500),
-      lastMessageAt: replyTs,
-      needsHumanHandoff: replyPlan.triggeredHandoff,
-      aiEnabled: replyPlan.triggeredHandoff ? false : true,
-      leadStatus: replyPlan.suggestedStatus ?? convContext.leadStatus,
+      matchedKbTitle,
+      matchedWorkflowName,
     });
 
+    await convRef.collection('messages').doc(replyMsgId).set(replyMessageDoc);
+    await convRef.update(
+      sanitizeFirestoreData({
+        lastMessagePreview: replyPlan.replyText.slice(0, 500),
+        lastMessageAt: replyTs,
+        needsHumanHandoff: replyPlan.triggeredHandoff,
+        aiEnabled: replyPlan.triggeredHandoff ? false : true,
+        leadStatus: replyPlan.suggestedStatus ?? convContext.leadStatus,
+      })
+    );
+
     if (replyPlan.suggestedStatus) {
-      await leadRef.update({
-        status: replyPlan.suggestedStatus,
-        lastContactAt: replyTs,
-      });
+      await leadRef.update(
+        sanitizeFirestoreData({
+          status: replyPlan.suggestedStatus,
+          lastContactAt: replyTs,
+        })
+      );
     }
 
-    const logEntry: AutomationLog = {
-      id: `log_${Date.now()}`,
+    await safeWriteAutomationLog(`log_${replyMs}`, {
       ownerUid,
       conversationId: convId,
-      workflowId: replyPlan.matchedWorkflow?.id,
-      workflowName: replyPlan.matchedWorkflow?.name,
-      matchedKbTitle: replyPlan.matchedKbItem?.title,
+      workflowId: matchedWorkflowId,
+      workflowName: matchedWorkflowName,
+      matchedKbTitle,
       channel: 'Messenger (Live)',
       outcome: replyPlan.triggeredHandoff ? 'handoff' : 'replied',
       createdAt: replyTs,
-    };
-    await wsRef.collection('automationLogs').doc(logEntry.id).set(logEntry);
-  }
+    });
 
-  return { status: 'processed', psid };
+    return { status: 'processed', psid };
+  } catch (automationErr) {
+    const errMsg =
+      automationErr instanceof Error ? automationErr.message : 'Automation processing error';
+    console.error('Meta Messenger automation/reply error (incoming message preserved):', automationErr);
+
+    await safeWriteAutomationLog(`log_err_${Date.now()}`, {
+      ownerUid,
+      conversationId: convId,
+      workflowId: matchedWorkflowId,
+      workflowName: matchedWorkflowName,
+      matchedKbTitle,
+      channel: 'Messenger (Live)',
+      outcome: 'error',
+      errorMessage: errMsg,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { status: 'saved_automation_error', psid };
+  }
 }

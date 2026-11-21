@@ -319,18 +319,19 @@ export async function handleMessengerSend(
   }
 
   try {
-    const [{ sendMetaMessengerMessage }, { getAdminFirestore }] = await Promise.all([
-      import('./metaMessenger.js'),
-      import('./firebaseAdmin.js'),
-    ]);
+    const [{ sendMetaMessengerMessage }, { getAdminFirestore }, { buildReplyMessageDoc, sanitizeFirestoreData }] =
+      await Promise.all([
+        import('./metaMessenger.js'),
+        import('./firebaseAdmin.js'),
+        import('./firestoreSanitizer.js'),
+      ]);
     const sent = await sendMetaMessengerMessage({ recipientPsid, text });
     const nowIso = new Date().toISOString();
     const db = getAdminFirestore();
     const msgId = `msg_op_${Date.now()}`;
     const ownerUid = firebaseUser.uid;
 
-    const msgDoc: Message = {
-      id: msgId,
+    const msgFirestoreDoc = buildReplyMessageDoc({
       ownerUid,
       conversationId,
       externalMid: sent.messageId,
@@ -339,7 +340,7 @@ export async function handleMessengerSend(
       text: text.slice(0, 4000),
       timestamp: nowIso,
       isSimulated: false,
-    };
+    });
 
     const convRef = db
       .collection('workspaces')
@@ -347,18 +348,25 @@ export async function handleMessengerSend(
       .collection('conversations')
       .doc(conversationId);
 
-    await convRef.collection('messages').doc(msgId).set(msgDoc);
-    await convRef.update({
-      unreadCount: 0,
-      needsHumanHandoff: false,
-      lastMessagePreview: text.slice(0, 500),
-      lastMessageAt: nowIso,
-    });
+    await convRef.collection('messages').doc(msgId).set(msgFirestoreDoc);
+    await convRef.update(
+      sanitizeFirestoreData({
+        unreadCount: 0,
+        needsHumanHandoff: false,
+        lastMessagePreview: text.slice(0, 500),
+        lastMessageAt: nowIso,
+      })
+    );
+
+    const responseMessage: Message = {
+      id: msgId,
+      ...msgFirestoreDoc,
+    };
 
     sendJson(res, 200, {
       sent: true,
       externalMid: sent.messageId,
-      message: msgDoc,
+      message: responseMessage,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send Messenger reply.';

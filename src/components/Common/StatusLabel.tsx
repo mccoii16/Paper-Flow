@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Clock, PauseCircle, Sparkles, UserCheck } from 'lucide-react';
 import type { BookingStatus, LeadStatus, WorkflowStatus } from '../../types/paperflow';
 
@@ -91,16 +92,41 @@ export function WorkflowStatusText({ status }: { status: WorkflowStatus }) {
 export function AvatarMonogram({
   initials,
   tone,
+  imageUrl,
+  alt,
 }: {
   initials: string;
   tone: 'pink' | 'navy' | 'slate' | 'rose';
+  imageUrl?: string;
+  alt?: string;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [imageUrl]);
+
   const classes = {
     pink: 'bg-pink-100 text-pink-900 dark:bg-pink-950/60 dark:text-pink-200',
     navy: 'bg-[#0F172A] text-white dark:bg-slate-800 dark:text-slate-100',
     slate: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
     rose: 'bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-200',
   }[tone];
+
+  const safeImageUrl =
+    imageUrl && imageUrl.startsWith('https://') && !imgFailed ? imageUrl : null;
+
+  if (safeImageUrl) {
+    return (
+      <img
+        src={safeImageUrl}
+        alt={alt ? `${alt} profile photo` : ''}
+        referrerPolicy="no-referrer"
+        onError={() => setImgFailed(true)}
+        className="h-9 w-9 shrink-0 rounded-xl object-cover border border-[#E7E4ED] dark:border-slate-700"
+      />
+    );
+  }
 
   return (
     <div

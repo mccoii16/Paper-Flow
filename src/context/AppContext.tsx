@@ -9,6 +9,7 @@ import type {
   Lead,
   LeadStatus,
   Message,
+  MessengerProfileStatus,
   NavPageId,
   OperatorSession,
   ThemeMode,
@@ -76,6 +77,12 @@ interface AppContextValue {
   addConversationTag: (conversationId: string, tag: string) => Promise<void>;
   removeConversationTag: (conversationId: string, tag: string) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
+  refreshConversationProfile: (conversationId: string) => Promise<{
+    updated: boolean;
+    statusMessage: string;
+    profileStatus?: MessengerProfileStatus;
+    metaErrorCode?: number;
+  }>;
   // Workflows CRUD
   saveWorkflow: (workflow: Workflow) => Promise<void>;
   createWorkflow: (workflow: Omit<Workflow, 'id' | 'updatedAt'>) => Promise<Workflow>;
@@ -828,30 +835,147 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [workspace.workflows, session, isDemoMode, updateDemoWorkspace]
   );
 
+  const refreshConversationProfile = useCallback(
+    async (conversationId: string) => {
+      if (!session) {
+        return {
+          updated: false,
+          statusMessage: 'Sign in to refresh Messenger contact profiles.',
+          profileStatus: 'unavailable' as MessengerProfileStatus,
+        };
+      }
+      const targetConv = workspace.conversations.find((c) => c.id === conversationId);
+      if (!targetConv) {
+        return {
+          updated: false,
+          statusMessage: 'Conversation not found.',
+          profileStatus: 'unavailable' as MessengerProfileStatus,
+        };
+      }
+      if (isDemoMode || targetConv.channel !== 'Messenger (Live)') {
+        const msg =
+          'Profile refresh connects to Meta Graph API for live Messenger threads only.';
+        notify(msg, 'neutral');
+        return {
+          updated: false,
+          statusMessage: msg,
+          profileStatus: targetConv.profileStatus ?? ('unavailable' as MessengerProfileStatus),
+        };
+      }
+
+      try {
+        const result = await paperflowRepository.refreshMessengerProfile({
+          workspaceId: session.workspaceId,
+          conversationId: targetConv.id,
+        });
+        if (result.updated) {
+          notify(result.statusMessage, 'success');
+        } else {
+          notify(
+            result.metaErrorCode !== undefined
+              ? `${result.statusMessage} (Meta code ${result.metaErrorCode})`
+              : result.statusMessage,
+            'warning'
+          );
+        }
+        return {
+          updated: result.updated,
+          statusMessage: result.statusMessage,
+          profileStatus: result.profileStatus,
+          metaErrorCode: result.metaErrorCode,
+        };
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Profile unavailable from Meta';
+        notify(message, 'warning');
+        return {
+          updated: false,
+          statusMessage: message,
+          profileStatus: 'unavailable' as MessengerProfileStatus,
+        };
+      }
+    },
+    [session, workspace.conversations, isDemoMode, notify]
+  );
+
   const upsertLead = useCallback(
     async (lead: Lead) => {
       if (!session) return;
+      const existingLead = workspace.leads.find((l) => l.id === lead.id);
+      const trimmedName = lead.name.trim();
+      const isFallbackName = /^Messenger Guest\b/i.test(trimmedName);
+      const nameWasEditedManually =
+        !isFallbackName &&
+        (!existingLead || existingLead.name.trim() !== trimmedName);
+
+      const preparedLead: Lead = {
+        ...lead,
+        name: trimmedName,
+        nameSource: nameWasEditedManually
+          ? 'manual'
+          : lead.nameSource ?? existingLead?.nameSource,
+        profileStatus: nameWasEditedManually
+          ? 'manual'
+          : lead.profileStatus ?? existingLead?.profileStatus,
+        profileStatusMessage: nameWasEditedManually
+          ? 'Manually assigned name'
+          : lead.profileStatusMessage ?? existingLead?.profileStatusMessage,
+      };
+
+      const initials =
+        trimmedName
+          .split(/\s+/)
+          .map((w) => w.replace(/[^a-zA-Z0-9]/g, '')[0] ?? '')
+          .filter(Boolean)
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || 'MG';
+
       if (isDemoMode) {
         updateDemoWorkspace((prev) => {
-          const exists = prev.leads.some((l) => l.id === lead.id);
+          const exists = prev.leads.some((l) => l.id === preparedLead.id);
           return {
             ...prev,
             leads: exists
-              ? prev.leads.map((l) => (l.id === lead.id ? lead : l))
-              : [lead, ...prev.leads],
+              ? prev.leads.map((l) => (l.id === preparedLead.id ? preparedLead : l))
+              : [preparedLead, ...prev.leads],
             conversations: prev.conversations.map((c) =>
-              c.leadId === lead.id
-                ? { ...c, leadStatus: lead.status, tags: lead.tags, guestName: lead.name }
+              c.leadId === preparedLead.id
+                ? {
+                    ...c,
+                    leadStatus: preparedLead.status,
+                    tags: preparedLead.tags,
+                    guestName: preparedLead.name,
+                    avatarInitials: isFallbackName ? c.avatarInitials : initials,
+                    nameSource: preparedLead.nameSource ?? c.nameSource,
+                    profileStatus: preparedLead.profileStatus ?? c.profileStatus,
+                    profileStatusMessage:
+                      preparedLead.profileStatusMessage ?? c.profileStatusMessage,
+                  }
                 : c
             ),
           };
         });
       } else {
-        await paperflowRepository.saveLead(session, lead);
+        await paperflowRepository.saveLead(session, preparedLead);
+        const linkedConv = workspace.conversations.find((c) => c.leadId === preparedLead.id);
+        if (linkedConv) {
+          await paperflowRepository.saveConversationMeta(session, {
+            ...linkedConv,
+            guestName: preparedLead.name,
+            avatarInitials: isFallbackName ? linkedConv.avatarInitials : initials,
+            leadStatus: preparedLead.status,
+            tags: preparedLead.tags,
+            nameSource: preparedLead.nameSource ?? linkedConv.nameSource,
+            profileStatus: preparedLead.profileStatus ?? linkedConv.profileStatus,
+            profileStatusMessage:
+              preparedLead.profileStatusMessage ?? linkedConv.profileStatusMessage,
+          });
+        }
       }
-      notify(`Saved contact "${lead.name}"`, 'success');
+      notify(`Saved contact "${preparedLead.name}"`, 'success');
     },
-    [session, isDemoMode, updateDemoWorkspace, notify]
+    [session, workspace.leads, workspace.conversations, isDemoMode, updateDemoWorkspace, notify]
   );
 
   const deleteLead = useCallback(
@@ -1009,6 +1133,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addConversationTag,
         removeConversationTag,
         markConversationRead,
+        refreshConversationProfile,
         saveWorkflow,
         createWorkflow,
         deleteWorkflow,

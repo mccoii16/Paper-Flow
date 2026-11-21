@@ -2,10 +2,14 @@ import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getFirebaseRuntimeConfig } from './firebaseConfig.js';
 import { verifyMetaSignature, type MetaMessagingEvent } from './webhookSafeguards.js';
-import { resolveWorkspaceIdForUser } from '../src/services/firebaseBlueprint.js';
+import {
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  resolveWorkspaceIdForUser,
+} from '../src/services/firebaseBlueprint.js';
 import type { BackendHealthStatus, Message } from '../src/types/paperflow.js';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB hard cap
+const VALID_DOC_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 
 export interface NodeApiRequest extends IncomingMessage {
   rawBody?: Buffer;
@@ -371,5 +375,95 @@ export async function handleMessengerSend(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send Messenger reply.';
     sendJson(res, 502, { error: message });
+  }
+}
+
+/**
+ * Authenticated endpoint to refresh an existing Messenger contact's profile from Meta
+ * strictly on the server using META_PAGE_ACCESS_TOKEN and the stored sender PSID.
+ */
+export async function handleMessengerRefreshProfile(
+  req: NodeApiRequest,
+  res: ServerResponse
+): Promise<void> {
+  const firebaseUser = await authenticateFirebaseRequest(req, res);
+  if (!firebaseUser) return;
+
+  let body: {
+    workspaceId?: string;
+    conversationId?: string;
+  };
+
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    body = req.body as typeof body;
+  } else {
+    try {
+      const raw = await readRawRequestBody(req);
+      body = JSON.parse(raw.toString('utf8')) as typeof body;
+    } catch {
+      sendJson(res, 400, { error: 'Invalid JSON request body.' });
+      return;
+    }
+  }
+
+  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
+  const conversationId =
+    typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
+
+  if (
+    !VALID_DOC_ID_PATTERN.test(workspaceId) ||
+    !VALID_DOC_ID_PATTERN.test(conversationId)
+  ) {
+    sendJson(res, 400, {
+      error: 'Valid workspaceId and conversationId are required.',
+    });
+    return;
+  }
+
+  const allowedWorkspaceId = resolveWorkspaceIdForUser(firebaseUser.email, firebaseUser.uid);
+  if (workspaceId !== allowedWorkspaceId) {
+    sendJson(res, 403, {
+      error: 'Forbidden',
+      message: 'Not authorized to refresh contacts for this workspace.',
+    });
+    return;
+  }
+
+  const isAdmin = Boolean(
+    firebaseUser.email &&
+      firebaseUser.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase()
+  );
+
+  try {
+    const { refreshMessengerContactProfile } = await import('./metaMessenger.js');
+    const result = await refreshMessengerContactProfile({
+      workspaceId,
+      conversationId,
+      callerUid: firebaseUser.uid,
+      isAdmin,
+    });
+
+    if (result.status === 'not_found') {
+      sendJson(res, 404, { error: result.statusMessage, ...result });
+      return;
+    }
+    if (result.status === 'forbidden') {
+      sendJson(res, 403, { error: result.statusMessage, ...result });
+      return;
+    }
+    if (result.status === 'invalid_psid') {
+      sendJson(res, 400, { error: result.statusMessage, ...result });
+      return;
+    }
+
+    sendJson(res, 200, result);
+  } catch (error) {
+    console.error('Messenger profile refresh error:', error);
+    sendJson(res, 502, {
+      updated: false,
+      status: 'unavailable',
+      profileStatus: 'unavailable',
+      statusMessage: 'Profile unavailable from Meta',
+    });
   }
 }

@@ -20,6 +20,13 @@ export type LeadStatus =
 
 export type MessageSender = 'guest' | 'operator' | 'ai_sim' | 'ai_live' | 'system';
 export type MessengerChannel = 'Messenger (Simulated)' | 'Messenger (Live)';
+export type ContactNameSource = 'meta' | 'manual' | 'fallback';
+export type MessengerProfileStatus =
+  | 'synced'
+  | 'unavailable'
+  | 'permission_denied'
+  | 'rate_limited'
+  | 'manual';
 
 export interface Message {
   id: string;
@@ -45,6 +52,11 @@ export interface Conversation {
   lastName?: string;
   profilePicUrl?: string;
   profileFetchedAt?: string;
+  profileLastAttemptAt?: string;
+  profileStatus?: MessengerProfileStatus;
+  profileStatusMessage?: string;
+  profileLastErrorCode?: number;
+  nameSource?: ContactNameSource;
   messengerHandle: string;
   avatarInitials: string;
   avatarTone: 'pink' | 'navy' | 'slate' | 'rose';
@@ -127,6 +139,11 @@ export interface Lead {
   lastName?: string;
   profilePicUrl?: string;
   profileFetchedAt?: string;
+  profileLastAttemptAt?: string;
+  profileStatus?: MessengerProfileStatus;
+  profileStatusMessage?: string;
+  profileLastErrorCode?: number;
+  nameSource?: ContactNameSource;
   messengerHandle: string;
   email: string;
   phone: string;

@@ -212,3 +212,34 @@ test('TypeScript configs isolate vite/client to frontend while api/ and server/ 
   assert.equal(pkgJson.overrides?.['jwks-rsa']?.jose, '5.10.0');
 });
 
+test('POST /api/messenger/refresh-profile enforces method 405 and requires Firebase Bearer auth', async () => {
+  const { default: refreshHandler } = await import('../api/messenger/refresh-profile.js');
+  const { createServer } = await import('node:http');
+
+  const server = createServer((req, res) => {
+    void refreshHandler(req, res);
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const getRes = await fetch(baseUrl, { method: 'GET' });
+    assert.equal(getRes.status, 405);
+
+    const postNoAuth = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'paper-dreams-cebu',
+        conversationId: 'meta_8660',
+      }),
+    });
+    assert.equal(postNoAuth.status, 401);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+

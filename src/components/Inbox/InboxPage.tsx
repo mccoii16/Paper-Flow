@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Bot,
   Plus,
+  RefreshCw,
   Search,
   Send,
   Sparkles,
@@ -48,6 +49,7 @@ export function InboxPage() {
     addConversationTag,
     removeConversationTag,
     markConversationRead,
+    refreshConversationProfile,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,6 +59,12 @@ export function InboxPage() {
   const [showSimPanel, setShowSimPanel] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [isRefreshingProfile, setIsRefreshingProfile] = useState(false);
+  const [refreshFeedback, setRefreshFeedback] = useState<{
+    conversationId: string;
+    message: string;
+    tone: 'success' | 'warning' | 'neutral';
+  } | null>(null);
 
   const filteredConversations = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -111,6 +119,29 @@ export function InboxPage() {
     if (!activeConv || !tagInput.trim()) return;
     addConversationTag(activeConv.id, tagInput);
     setTagInput('');
+  };
+
+  const handleRefreshProfile = async () => {
+    if (!activeConv || isRefreshingProfile) return;
+    setIsRefreshingProfile(true);
+    try {
+      const res = await refreshConversationProfile(activeConv.id);
+      const detail =
+        !res.updated && res.metaErrorCode !== undefined
+          ? `${res.statusMessage} (Meta code ${res.metaErrorCode})`
+          : res.statusMessage;
+      setRefreshFeedback({
+        conversationId: activeConv.id,
+        message: detail,
+        tone: res.updated
+          ? 'success'
+          : activeConv.channel === 'Messenger (Live)'
+          ? 'warning'
+          : 'neutral',
+      });
+    } finally {
+      setIsRefreshingProfile(false);
+    }
   };
 
   return (
@@ -517,6 +548,91 @@ export function InboxPage() {
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </form>
+            </div>
+
+            <div className="pt-4 border-t border-[#E7E4ED] dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-display text-sm font-semibold text-[#0F172A] dark:text-white">
+                  Messenger Contact
+                </h2>
+                {activeConv.nameSource === 'manual' && (
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Manual name
+                  </span>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#E7E4ED] dark:border-slate-800 bg-white dark:bg-[#131C31] p-3 space-y-2.5">
+                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {activeConv.channel !== 'Messenger (Live)' ? (
+                    <span>Simulated contact (Meta profile sync applies to live threads).</span>
+                  ) : activeConv.profileStatus === 'synced' ? (
+                    <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                      {activeConv.profileStatusMessage || 'Profile synced from Meta'}
+                    </span>
+                  ) : activeConv.profileStatus === 'manual' || activeConv.nameSource === 'manual' ? (
+                    <span className="text-slate-700 dark:text-slate-200 font-medium">
+                      Manually assigned name preserved
+                    </span>
+                  ) : activeConv.profileStatus === 'permission_denied' ||
+                    activeConv.profileStatus === 'rate_limited' ||
+                    activeConv.profileStatus === 'unavailable' ? (
+                    <span className="text-amber-700 dark:text-amber-400 font-medium">
+                      {activeConv.profileStatusMessage || 'Profile unavailable from Meta'}
+                      {activeConv.profileLastErrorCode !== undefined
+                        ? ` (Meta code ${activeConv.profileLastErrorCode})`
+                        : ''}
+                    </span>
+                  ) : /^Messenger Guest\b/i.test(activeConv.guestName) ? (
+                    <span className="text-slate-600 dark:text-slate-300">
+                      Using stable PSID fallback name. Refresh to check Meta profile availability.
+                    </span>
+                  ) : (
+                    <span className="text-slate-600 dark:text-slate-300">
+                      Live Messenger contact
+                    </span>
+                  )}
+                </div>
+
+                {activeConv.profileFetchedAt && (
+                  <div className="text-[11px] font-mono tabular-nums text-slate-400">
+                    Synced {formatShortDate(activeConv.profileFetchedAt)} ·{' '}
+                    {formatShortTime(activeConv.profileFetchedAt)}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void handleRefreshProfile()}
+                  disabled={isRefreshingProfile || activeConv.channel !== 'Messenger (Live)'}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#E7E4ED] dark:border-slate-700 bg-[#FAF8FB] dark:bg-[#0B1120] text-xs font-semibold text-[#0F172A] dark:text-slate-100 hover:bg-pink-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 text-pink-600 dark:text-pink-400 ${
+                      isRefreshingProfile ? 'animate-spin' : ''
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {isRefreshingProfile ? 'Refreshing Profile...' : 'Refresh Messenger Profile'}
+                  </span>
+                </button>
+
+                {refreshFeedback && refreshFeedback.conversationId === activeConv.id && (
+                  <p
+                    role="status"
+                    className={`text-[11px] leading-snug ${
+                      refreshFeedback.tone === 'success'
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : refreshFeedback.tone === 'warning'
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {refreshFeedback.message}
+                  </p>
+                )}
+              </div>
             </div>
 
             {linkedLead && (

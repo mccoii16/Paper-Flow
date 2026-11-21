@@ -489,6 +489,11 @@ export const paperflowRepository = {
             lastName: conversation.lastName,
             profilePicUrl: conversation.profilePicUrl,
             profileFetchedAt: conversation.profileFetchedAt,
+            profileLastAttemptAt: conversation.profileLastAttemptAt,
+            profileStatus: conversation.profileStatus,
+            profileStatusMessage: conversation.profileStatusMessage?.slice(0, 240),
+            profileLastErrorCode: conversation.profileLastErrorCode,
+            nameSource: conversation.nameSource,
             avatarInitials: conversation.avatarInitials,
             aiEnabled: conversation.aiEnabled,
             leadStatus: conversation.leadStatus,
@@ -512,6 +517,11 @@ export const paperflowRepository = {
             lastName: conversation.lastName,
             profilePicUrl: conversation.profilePicUrl,
             profileFetchedAt: conversation.profileFetchedAt,
+            profileLastAttemptAt: conversation.profileLastAttemptAt,
+            profileStatus: conversation.profileStatus,
+            profileStatusMessage: conversation.profileStatusMessage?.slice(0, 240),
+            profileLastErrorCode: conversation.profileLastErrorCode,
+            nameSource: conversation.nameSource,
             messengerHandle: conversation.messengerHandle,
             avatarInitials: conversation.avatarInitials,
             avatarTone: conversation.avatarTone,
@@ -609,6 +619,11 @@ export const paperflowRepository = {
             lastName: lead.lastName?.slice(0, 80),
             profilePicUrl: lead.profilePicUrl?.slice(0, 1000),
             profileFetchedAt: lead.profileFetchedAt?.slice(0, 64),
+            profileLastAttemptAt: lead.profileLastAttemptAt?.slice(0, 64),
+            profileStatus: lead.profileStatus,
+            profileStatusMessage: lead.profileStatusMessage?.slice(0, 240),
+            profileLastErrorCode: lead.profileLastErrorCode,
+            nameSource: lead.nameSource,
             messengerHandle: lead.messengerHandle.slice(0, 120),
             email: lead.email.slice(0, 254),
             phone: lead.phone.slice(0, 40),
@@ -633,6 +648,11 @@ export const paperflowRepository = {
             lastName: lead.lastName?.slice(0, 80),
             profilePicUrl: lead.profilePicUrl?.slice(0, 1000),
             profileFetchedAt: lead.profileFetchedAt?.slice(0, 64),
+            profileLastAttemptAt: lead.profileLastAttemptAt?.slice(0, 64),
+            profileStatus: lead.profileStatus,
+            profileStatusMessage: lead.profileStatusMessage?.slice(0, 240),
+            profileLastErrorCode: lead.profileLastErrorCode,
+            nameSource: lead.nameSource,
             messengerHandle: lead.messengerHandle.slice(0, 120),
             email: lead.email.slice(0, 254),
             phone: lead.phone.slice(0, 40),
@@ -792,6 +812,76 @@ export const paperflowRepository = {
       throw new Error(data.error || `Meta Send API failed (${res.status}).`);
     }
     return data.message;
+  },
+
+  async refreshMessengerProfile(params: {
+    workspaceId: string;
+    conversationId: string;
+  }): Promise<{
+    updated: boolean;
+    status: string;
+    profileStatus?: Conversation['profileStatus'];
+    statusMessage: string;
+    guestName?: string;
+    firstName?: string;
+    lastName?: string;
+    profilePicUrl?: string;
+    avatarInitials?: string;
+    nameSource?: Conversation['nameSource'];
+    profileFetchedAt?: string;
+    profileLastAttemptAt?: string;
+    metaErrorCode?: number;
+  }> {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('Firebase authentication required to refresh Messenger profiles.');
+    }
+    const idToken = await user.getIdToken();
+    const res = await fetch('/api/messenger/refresh-profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(params),
+    });
+
+    const data = (await res.json()) as {
+      updated?: boolean;
+      status?: string;
+      profileStatus?: Conversation['profileStatus'];
+      statusMessage?: string;
+      error?: string;
+      guestName?: string;
+      firstName?: string;
+      lastName?: string;
+      profilePicUrl?: string;
+      avatarInitials?: string;
+      nameSource?: Conversation['nameSource'];
+      profileFetchedAt?: string;
+      profileLastAttemptAt?: string;
+      metaErrorCode?: number;
+    };
+
+    if (!res.ok) {
+      throw new Error(data.error || data.statusMessage || `Profile refresh failed (${res.status}).`);
+    }
+
+    return {
+      updated: Boolean(data.updated),
+      status: data.status || 'unavailable',
+      profileStatus: data.profileStatus,
+      statusMessage: data.statusMessage || 'Profile unavailable from Meta',
+      guestName: data.guestName,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      profilePicUrl: data.profilePicUrl,
+      avatarInitials: data.avatarInitials,
+      nameSource: data.nameSource,
+      profileFetchedAt: data.profileFetchedAt,
+      profileLastAttemptAt: data.profileLastAttemptAt,
+      metaErrorCode: data.metaErrorCode,
+    };
   },
 
   async checkExistingWorkflowCount(session: OperatorSession): Promise<number> {

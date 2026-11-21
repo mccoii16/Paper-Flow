@@ -91,7 +91,9 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerUid', 'leadId', 'guestName', 'aiEnabled', 'leadStatus', 'channel']) &&
         data.keys().hasOnly([
           'ownerUid', 'leadId', 'psid', 'guestName', 'firstName', 'lastName',
-          'profilePicUrl', 'profileFetchedAt', 'messengerHandle',
+          'profilePicUrl', 'profileFetchedAt', 'profileLastAttemptAt',
+          'profileStatus', 'profileStatusMessage', 'profileLastErrorCode',
+          'nameSource', 'messengerHandle',
           'avatarInitials', 'avatarTone', 'aiEnabled', 'leadStatus', 'tags',
           'unreadCount', 'lastMessagePreview', 'lastMessageAt', 'channel',
           'assignedOperator', 'needsHumanHandoff'
@@ -107,6 +109,11 @@ service cloud.firestore {
         (!('lastName' in data) || isStringBounded(data.lastName, 0, 80)) &&
         (!('profilePicUrl' in data) || isStringBounded(data.profilePicUrl, 0, 1000)) &&
         (!('profileFetchedAt' in data) || isStringBounded(data.profileFetchedAt, 0, 64)) &&
+        (!('profileLastAttemptAt' in data) || isStringBounded(data.profileLastAttemptAt, 0, 64)) &&
+        (!('profileStatus' in data) || data.profileStatus in ['synced', 'unavailable', 'permission_denied', 'rate_limited', 'manual']) &&
+        (!('profileStatusMessage' in data) || isStringBounded(data.profileStatusMessage, 0, 240)) &&
+        (!('profileLastErrorCode' in data) || (data.profileLastErrorCode is number && data.profileLastErrorCode >= 0 && data.profileLastErrorCode <= 999999)) &&
+        (!('nameSource' in data) || data.nameSource in ['meta', 'manual', 'fallback']) &&
         (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
         (!('avatarInitials' in data) || isStringBounded(data.avatarInitials, 1, 4)) &&
         (!('avatarTone' in data) || data.avatarTone in ['pink', 'navy', 'slate', 'rose']) &&
@@ -158,7 +165,9 @@ service cloud.firestore {
       return data.keys().hasAll(['ownerUid', 'name', 'status', 'source']) &&
         data.keys().hasOnly([
           'ownerUid', 'psid', 'name', 'firstName', 'lastName',
-          'profilePicUrl', 'profileFetchedAt', 'messengerHandle', 'email', 'phone',
+          'profilePicUrl', 'profileFetchedAt', 'profileLastAttemptAt',
+          'profileStatus', 'profileStatusMessage', 'profileLastErrorCode',
+          'nameSource', 'messengerHandle', 'email', 'phone',
           'eventType', 'eventDate', 'venue', 'estimatedValuePhp', 'status',
           'tags', 'source', 'lastContactAt', 'notes'
         ]) &&
@@ -171,6 +180,11 @@ service cloud.firestore {
         (!('lastName' in data) || isStringBounded(data.lastName, 0, 80)) &&
         (!('profilePicUrl' in data) || isStringBounded(data.profilePicUrl, 0, 1000)) &&
         (!('profileFetchedAt' in data) || isStringBounded(data.profileFetchedAt, 0, 64)) &&
+        (!('profileLastAttemptAt' in data) || isStringBounded(data.profileLastAttemptAt, 0, 64)) &&
+        (!('profileStatus' in data) || data.profileStatus in ['synced', 'unavailable', 'permission_denied', 'rate_limited', 'manual']) &&
+        (!('profileStatusMessage' in data) || isStringBounded(data.profileStatusMessage, 0, 240)) &&
+        (!('profileLastErrorCode' in data) || (data.profileLastErrorCode is number && data.profileLastErrorCode >= 0 && data.profileLastErrorCode <= 999999)) &&
+        (!('nameSource' in data) || data.nameSource in ['meta', 'manual', 'fallback']) &&
         (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
         (!('email' in data) || isStringBounded(data.email, 0, 254)) &&
         (!('phone' in data) || isStringBounded(data.phone, 0, 40)) &&
@@ -300,6 +314,8 @@ service cloud.firestore {
           isWorkspaceOwnerOrMember(workspaceId) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
             'guestName', 'firstName', 'lastName', 'profilePicUrl', 'profileFetchedAt',
+            'profileLastAttemptAt', 'profileStatus', 'profileStatusMessage',
+            'profileLastErrorCode', 'nameSource',
             'avatarInitials', 'aiEnabled', 'leadStatus', 'tags', 'unreadCount',
             'lastMessagePreview', 'lastMessageAt', 'assignedOperator', 'needsHumanHandoff'
           ]);
@@ -370,6 +386,8 @@ service cloud.firestore {
           isWorkspaceOwnerOrMember(workspaceId) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
             'name', 'firstName', 'lastName', 'profilePicUrl', 'profileFetchedAt',
+            'profileLastAttemptAt', 'profileStatus', 'profileStatusMessage',
+            'profileLastErrorCode', 'nameSource',
             'messengerHandle', 'email', 'phone', 'eventType',
             'eventDate', 'venue', 'estimatedValuePhp', 'status', 'tags',
             'lastContactAt', 'notes'

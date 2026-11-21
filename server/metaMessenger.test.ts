@@ -17,6 +17,7 @@ import {
 } from './metaProfile.js';
 import {
   processIncomingMetaEvent,
+  refreshMessengerContactProfile,
   resetMetaMessengerCachesForTests,
 } from './metaMessenger.js';
 import { buildWebhookDedupKey } from './webhookSafeguards.js';
@@ -639,4 +640,422 @@ test('processIncomingMetaEvent preserves incoming message even when automationLo
     }
   );
   assert.equal(echo.status, 'echo_ignored');
+});
+
+test('fetchMessengerUserProfile requests valid PSID fields (no invalid name field) and retries without profile_pic on code 100', async () => {
+  const requestedUrls: string[] = [];
+  const retryFetch = (async (input: string | URL) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.includes('profile_pic')) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: '(#100) Tried accessing nonexisting field (profile_pic)',
+            type: 'OAuthException',
+            code: 100,
+          },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: '24001122338660',
+        first_name: 'Elena',
+        last_name: 'Gomez',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as unknown as typeof fetch;
+
+  const res = await fetchMessengerUserProfile({
+    psid: '24001122338660',
+    pageAccessToken: 'EAA_SECRET_TOKEN',
+    pageId: '100999888',
+    fetchImpl: retryFetch,
+  });
+
+  assert.equal(res.status, 'ok');
+  assert.equal(res.profile?.displayName, 'Elena Gomez');
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /fields=first_name%2Clast_name%2Cprofile_pic/);
+  assert.equal(requestedUrls[0].includes('%2Cname'), false);
+  assert.match(requestedUrls[1], /fields=first_name%2Clast_name$/i.test(requestedUrls[1]) ? /.*/ : /fields=first_name%2Clast_name&/);
+});
+
+test('refreshMessengerContactProfile updates existing fallback contact in-place without duplicates while preserving messages, bookings, tags, and lead status', async () => {
+  resetMetaMessengerCachesForTests();
+  const { db, store } = createStrictFakeFirestore();
+
+  store.set('workspaces/paper-dreams-cebu/conversations/meta_2400998660', {
+    ownerUid: 'owner-uid-1',
+    leadId: 'lead_meta_2400998660',
+    psid: '2400998660',
+    guestName: 'Messenger Guest 8660',
+    messengerHandle: 'psid:2400998660',
+    avatarInitials: 'MG',
+    avatarTone: 'pink',
+    aiEnabled: true,
+    leadStatus: 'Proposal Sent',
+    tags: ['Live Messenger', 'Wedding', 'VIP'],
+    unreadCount: 2,
+    lastMessagePreview: 'Looking forward to the quote!',
+    lastMessageAt: '2026-06-01T08:00:00.000Z',
+    channel: 'Messenger (Live)',
+    needsHumanHandoff: false,
+  });
+  store.set('workspaces/paper-dreams-cebu/conversations/meta_2400998660/messages/mid_existing_1', {
+    ownerUid: 'owner-uid-1',
+    conversationId: 'meta_2400998660',
+    sender: 'guest',
+    senderName: 'Messenger Guest 8660',
+    text: 'Looking forward to the quote!',
+    timestamp: '2026-06-01T08:00:00.000Z',
+  });
+  store.set('workspaces/paper-dreams-cebu/leads/lead_meta_2400998660', {
+    ownerUid: 'owner-uid-1',
+    psid: '2400998660',
+    name: 'Messenger Guest 8660',
+    messengerHandle: 'psid:2400998660',
+    email: 'guest@example.com',
+    phone: '09171234567',
+    eventType: 'Wedding Reception',
+    eventDate: '2026-12-19',
+    venue: 'Shangri-La Mactan',
+    estimatedValuePhp: 28000,
+    status: 'Proposal Sent',
+    tags: ['Live Messenger', 'Wedding', 'VIP'],
+    source: 'Messenger (Live)',
+    lastContactAt: '2026-06-01T08:00:00.000Z',
+    notes: 'Prefers ivory foil stationery.',
+  });
+  store.set('workspaces/paper-dreams-cebu/bookings/bk_existing_1', {
+    ownerUid: 'owner-uid-1',
+    leadId: 'lead_meta_2400998660',
+    clientName: 'Messenger Guest 8660',
+    eventTitle: 'Dec 19 Wedding',
+    packageName: 'Luxe Mirror Booth',
+    status: 'Pending Deposit',
+  });
+
+  const mockFetch = (async () =>
+    new Response(
+      JSON.stringify({
+        id: '2400998660',
+        first_name: 'Katrina',
+        last_name: 'Lim',
+        profile_pic: 'https://platform-lookaside.fbsbx.com/katrina.jpg',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )) as unknown as typeof fetch;
+
+  const refreshed = await refreshMessengerContactProfile(
+    {
+      workspaceId: 'paper-dreams-cebu',
+      conversationId: 'meta_2400998660',
+      callerUid: 'owner-uid-1',
+      isAdmin: true,
+    },
+    {
+      db,
+      fetchImpl: mockFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      pageId: '100999888',
+      nowMs: Date.UTC(2026, 5, 2, 10, 0, 0),
+    }
+  );
+
+  assert.equal(refreshed.updated, true);
+  assert.equal(refreshed.status, 'synced');
+  assert.equal(refreshed.guestName, 'Katrina Lim');
+
+  // Verify zero duplicate conversations or leads were created
+  const convKeys = [...store.keys()].filter(
+    (k) => k.startsWith('workspaces/paper-dreams-cebu/conversations/') && !k.includes('/messages/')
+  );
+  const leadKeys = [...store.keys()].filter((k) =>
+    k.startsWith('workspaces/paper-dreams-cebu/leads/')
+  );
+  assert.equal(convKeys.length, 1);
+  assert.equal(leadKeys.length, 1);
+
+  const updatedConv = store.get('workspaces/paper-dreams-cebu/conversations/meta_2400998660');
+  assert.equal(updatedConv?.guestName, 'Katrina Lim');
+  assert.equal(updatedConv?.avatarInitials, 'KL');
+  assert.equal(updatedConv?.profilePicUrl, 'https://platform-lookaside.fbsbx.com/katrina.jpg');
+  assert.equal(updatedConv?.profileStatus, 'synced');
+  assert.equal(updatedConv?.nameSource, 'meta');
+  assert.equal(updatedConv?.leadStatus, 'Proposal Sent');
+  assert.deepEqual(updatedConv?.tags, ['Live Messenger', 'Wedding', 'VIP']);
+
+  const updatedLead = store.get('workspaces/paper-dreams-cebu/leads/lead_meta_2400998660');
+  assert.equal(updatedLead?.name, 'Katrina Lim');
+  assert.equal(updatedLead?.notes, 'Prefers ivory foil stationery.');
+  assert.equal(updatedLead?.venue, 'Shangri-La Mactan');
+  assert.equal(updatedLead?.status, 'Proposal Sent');
+
+  // Existing message and booking remain untouched
+  assert.ok(
+    store.get('workspaces/paper-dreams-cebu/conversations/meta_2400998660/messages/mid_existing_1')
+  );
+  assert.ok(store.get('workspaces/paper-dreams-cebu/bookings/bk_existing_1'));
+});
+
+test('refreshMessengerContactProfile preserves manually assigned names and handles Meta permission denial with stable fallback & error code', async () => {
+  resetMetaMessengerCachesForTests();
+  const { db, store } = createStrictFakeFirestore();
+
+  // Case A: Manually assigned contact name must NEVER be overwritten
+  store.set('workspaces/paper-dreams-cebu/conversations/meta_8888001122', {
+    ownerUid: 'owner-uid-1',
+    leadId: 'lead_meta_8888001122',
+    psid: '8888001122',
+    guestName: 'Bride - Clara Reyes',
+    nameSource: 'manual',
+    messengerHandle: 'psid:8888001122',
+    avatarInitials: 'BC',
+    avatarTone: 'pink',
+    aiEnabled: true,
+    leadStatus: 'Qualified',
+    tags: ['Live Messenger'],
+    unreadCount: 0,
+    lastMessagePreview: 'Thanks!',
+    lastMessageAt: '2026-06-01T08:00:00.000Z',
+    channel: 'Messenger (Live)',
+    needsHumanHandoff: false,
+  });
+  store.set('workspaces/paper-dreams-cebu/leads/lead_meta_8888001122', {
+    ownerUid: 'owner-uid-1',
+    psid: '8888001122',
+    name: 'Bride - Clara Reyes',
+    nameSource: 'manual',
+    messengerHandle: 'psid:8888001122',
+    email: '',
+    phone: '',
+    eventType: 'Wedding',
+    eventDate: '',
+    venue: '',
+    estimatedValuePhp: 0,
+    status: 'Qualified',
+    tags: ['Live Messenger'],
+    source: 'Messenger (Live)',
+    lastContactAt: '2026-06-01T08:00:00.000Z',
+    notes: '',
+  });
+
+  const deniedFetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          message: '(#200) Permissions error',
+          type: 'OAuthException',
+          code: 200,
+        },
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    )) as unknown as typeof fetch;
+
+  const manualDenied = await refreshMessengerContactProfile(
+    {
+      workspaceId: 'paper-dreams-cebu',
+      conversationId: 'meta_8888001122',
+      callerUid: 'owner-uid-1',
+      isAdmin: true,
+    },
+    {
+      db,
+      fetchImpl: deniedFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      nowMs: Date.UTC(2026, 5, 2, 10, 0, 0),
+    }
+  );
+  assert.equal(manualDenied.updated, false);
+  assert.equal(manualDenied.status, 'permission_denied');
+  assert.equal(manualDenied.statusMessage, 'Profile unavailable from Meta');
+  assert.equal(manualDenied.metaErrorCode, 200);
+  assert.equal(
+    store.get('workspaces/paper-dreams-cebu/conversations/meta_8888001122')?.guestName,
+    'Bride - Clara Reyes'
+  );
+  assert.equal(
+    store.get('workspaces/paper-dreams-cebu/leads/lead_meta_8888001122')?.name,
+    'Bride - Clara Reyes'
+  );
+
+  // Even when Meta succeeds later, manual display name is preserved while photo/fields sync
+  const successFetch = (async () =>
+    new Response(
+      JSON.stringify({
+        id: '8888001122',
+        first_name: 'Clara',
+        last_name: 'Reyes',
+        profile_pic: 'https://platform-lookaside.fbsbx.com/clara.jpg',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )) as unknown as typeof fetch;
+
+  const manualSuccess = await refreshMessengerContactProfile(
+    {
+      workspaceId: 'paper-dreams-cebu',
+      conversationId: 'meta_8888001122',
+      callerUid: 'owner-uid-1',
+      isAdmin: true,
+    },
+    {
+      db,
+      fetchImpl: successFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      nowMs: Date.UTC(2026, 5, 2, 10, 5, 0),
+    }
+  );
+  assert.equal(manualSuccess.updated, true);
+  assert.equal(manualSuccess.guestName, 'Bride - Clara Reyes');
+  assert.equal(
+    store.get('workspaces/paper-dreams-cebu/conversations/meta_8888001122')?.profilePicUrl,
+    'https://platform-lookaside.fbsbx.com/clara.jpg'
+  );
+
+  // Case B: Fallback contact keeps stable PSID name when Meta denies access
+  store.set('workspaces/paper-dreams-cebu/conversations/meta_1111228660', {
+    ownerUid: 'owner-uid-1',
+    leadId: 'lead_meta_1111228660',
+    psid: '1111228660',
+    guestName: 'Messenger Guest 8660',
+    messengerHandle: 'psid:1111228660',
+    avatarInitials: 'MG',
+    avatarTone: 'pink',
+    aiEnabled: true,
+    leadStatus: 'New Inquiry',
+    tags: ['Live Messenger'],
+    unreadCount: 1,
+    lastMessagePreview: 'Hi',
+    lastMessageAt: '2026-06-01T08:00:00.000Z',
+    channel: 'Messenger (Live)',
+    needsHumanHandoff: false,
+  });
+
+  const fallbackDenied = await refreshMessengerContactProfile(
+    {
+      workspaceId: 'paper-dreams-cebu',
+      conversationId: 'meta_1111228660',
+      callerUid: 'owner-uid-1',
+      isAdmin: true,
+    },
+    {
+      db,
+      fetchImpl: deniedFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      nowMs: Date.UTC(2026, 5, 2, 10, 10, 0),
+    }
+  );
+  assert.equal(fallbackDenied.updated, false);
+  assert.equal(fallbackDenied.guestName, 'Messenger Guest 8660');
+  assert.equal(fallbackDenied.statusMessage, 'Profile unavailable from Meta');
+  assert.equal(fallbackDenied.metaErrorCode, 200);
+  const convAfterDenial = store.get('workspaces/paper-dreams-cebu/conversations/meta_1111228660');
+  assert.equal(convAfterDenial?.guestName, 'Messenger Guest 8660');
+  assert.equal(convAfterDenial?.profileStatus, 'permission_denied');
+  assert.equal(convAfterDenial?.profileStatusMessage, 'Profile unavailable from Meta');
+  assert.equal(convAfterDenial?.profileLastErrorCode, 200);
+});
+
+test('incoming webhook honors persisted profileLastAttemptAt rate limit across cold starts and retries after cooldown', async () => {
+  resetMetaMessengerCachesForTests();
+  const { db, store } = createStrictFakeFirestore();
+
+  store.set('workspaces/paper-dreams-cebu', {
+    ownerUid: 'owner-uid-1',
+    businessName: 'Paper Dreams Cebu',
+    currency: 'PHP',
+  });
+
+  let profileCalls = 0;
+  const countingFetch = (async (input: string | URL) => {
+    const url = String(input);
+    if (url.includes('/me/messages')) {
+      return new Response(JSON.stringify({ message_id: `m_out_${Date.now()}` }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    profileCalls += 1;
+    if (profileCalls === 1) {
+      return new Response(
+        JSON.stringify({ error: { message: '(#200) Permissions error', code: 200 } }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: '3333448660',
+        first_name: 'Miguel',
+        last_name: 'Tan',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as unknown as typeof fetch;
+
+  const t0 = Date.UTC(2026, 5, 2, 12, 0, 0);
+  await processIncomingMetaEvent(
+    {
+      sender: { id: '3333448660' },
+      recipient: { id: '100999888' },
+      timestamp: t0,
+      message: { mid: 'm_cold_1', text: 'Hi!' },
+    },
+    {
+      db,
+      fetchImpl: countingFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      pageId: '100999888',
+      workspaceId: 'paper-dreams-cebu',
+      nowMs: t0,
+    }
+  );
+  assert.equal(profileCalls, 1);
+
+  // Simulate Vercel serverless cold start (clear in-memory cache), send 2nd message 3 minutes later
+  resetMetaMessengerCachesForTests();
+  await processIncomingMetaEvent(
+    {
+      sender: { id: '3333448660' },
+      recipient: { id: '100999888' },
+      timestamp: t0 + 3 * 60_000,
+      message: { mid: 'm_cold_2', text: 'Anyone there?' },
+    },
+    {
+      db,
+      fetchImpl: countingFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      pageId: '100999888',
+      workspaceId: 'paper-dreams-cebu',
+      nowMs: t0 + 3 * 60_000,
+    }
+  );
+  // Persisted profileLastAttemptAt blocked redundant Graph API call within 15m cooldown
+  assert.equal(profileCalls, 1);
+
+  // Send 3rd message 20 minutes later -> cooldown elapsed, profile refreshes and upgrades fallback name
+  resetMetaMessengerCachesForTests();
+  await processIncomingMetaEvent(
+    {
+      sender: { id: '3333448660' },
+      recipient: { id: '100999888' },
+      timestamp: t0 + 20 * 60_000,
+      message: { mid: 'm_cold_3', text: 'Checking package rates please.' },
+    },
+    {
+      db,
+      fetchImpl: countingFetch,
+      pageAccessToken: 'EAA_TEST_TOKEN',
+      pageId: '100999888',
+      workspaceId: 'paper-dreams-cebu',
+      nowMs: t0 + 20 * 60_000,
+    }
+  );
+  assert.equal(profileCalls, 2);
+  const upgradedConv = store.get('workspaces/paper-dreams-cebu/conversations/meta_3333448660');
+  assert.equal(upgradedConv?.guestName, 'Miguel Tan');
+  assert.equal(upgradedConv?.profileStatus, 'synced');
 });

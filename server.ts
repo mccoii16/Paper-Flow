@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import {
   authenticateFirebaseRequest,
   getIntegrationReadiness,
+  handleMessengerRefreshProfile,
   handleMessengerSend,
   handleMetaWebhookGet,
   handleMetaWebhookPost,
@@ -55,6 +56,11 @@ async function startServer() {
   // Protected manual outbound Messenger reply endpoint
   app.post('/api/messenger/send', async (req: RawBodyRequest, res: Response) => {
     await handleMessengerSend(req as unknown as NodeApiRequest, res);
+  });
+
+  // Protected on-demand Meta Messenger profile refresh endpoint
+  app.post('/api/messenger/refresh-profile', async (req: RawBodyRequest, res: Response) => {
+    await handleMessengerRefreshProfile(req as unknown as NodeApiRequest, res);
   });
 
   // Public Meta Messenger Webhook Verification (GET)

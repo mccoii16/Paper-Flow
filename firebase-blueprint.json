@@ -1,0 +1,235 @@
+{
+  "entities": {
+    "WorkspaceProfile": {
+      "title": "WorkspaceProfile",
+      "description": "Studio workspace configuration for Paper Dreams Cebu.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "brandTagline": { "type": "string", "maxLength": 240 },
+        "location": { "type": "string", "maxLength": 160 },
+        "timezone": { "type": "string", "maxLength": 64 },
+        "currency": { "type": "string", "enum": ["PHP"] },
+        "operatingHours": { "type": "string", "maxLength": 160 },
+        "defaultAiFallbackMessage": { "type": "string", "maxLength": 1000 },
+        "isDemoWorkspace": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "businessName", "currency"]
+    },
+    "WorkspaceMember": {
+      "title": "WorkspaceMember",
+      "description": "Authorized operator member document controlling RBAC access.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["Owner", "Coordinator", "Viewer"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Messenger conversation thread metadata (live or simulated).",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "leadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "psid": { "type": "string", "maxLength": 128 },
+        "guestName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "messengerHandle": { "type": "string", "maxLength": 120 },
+        "avatarInitials": { "type": "string", "minLength": 1, "maxLength": 4 },
+        "avatarTone": { "type": "string", "enum": ["pink", "navy", "slate", "rose"] },
+        "aiEnabled": { "type": "boolean" },
+        "leadStatus": {
+          "type": "string",
+          "enum": ["New Inquiry", "Qualified", "Proposal Sent", "Booked", "Needs Handoff", "Archived"]
+        },
+        "tags": { "type": "array" },
+        "unreadCount": { "type": "number" },
+        "lastMessagePreview": { "type": "string", "maxLength": 500 },
+        "lastMessageAt": { "type": "string", "maxLength": 64 },
+        "channel": { "type": "string", "enum": ["Messenger (Simulated)", "Messenger (Live)"] },
+        "assignedOperator": { "type": "string", "maxLength": 120 },
+        "needsHumanHandoff": { "type": "boolean" }
+      },
+      "required": ["ownerUid", "leadId", "guestName", "aiEnabled", "leadStatus", "channel"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual message inside a conversation thread.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "conversationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "externalMid": { "type": "string", "maxLength": 200 },
+        "sender": { "type": "string", "enum": ["guest", "operator", "ai_sim", "ai_live", "system"] },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "isSimulated": { "type": "boolean" },
+        "matchedKbTitle": { "type": "string", "maxLength": 200 },
+        "matchedWorkflowName": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["ownerUid", "conversationId", "sender", "senderName", "text", "timestamp"]
+    },
+    "Workflow": {
+      "title": "Workflow",
+      "description": "Visual automation workflow definition with nodes and edges.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["Active", "Paused", "Draft"] },
+        "triggerSummary": { "type": "string", "maxLength": 300 },
+        "runsSimulated": { "type": "number" },
+        "handoffRatePct": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "nodes": { "type": "array" },
+        "edges": { "type": "array" }
+      },
+      "required": ["ownerUid", "name", "status", "nodes", "edges"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Client inquiry and event lead CRM record.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "psid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "messengerHandle": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "eventType": { "type": "string", "maxLength": 120 },
+        "eventDate": { "type": "string", "maxLength": 32 },
+        "venue": { "type": "string", "maxLength": 200 },
+        "estimatedValuePhp": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["New Inquiry", "Qualified", "Proposal Sent", "Booked", "Needs Handoff", "Archived"]
+        },
+        "tags": { "type": "array" },
+        "source": {
+          "type": "string",
+          "enum": ["Messenger (Simulated)", "Messenger (Live)", "Instagram DM (Planned)", "Manual Entry"]
+        },
+        "lastContactAt": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["ownerUid", "name", "status", "source"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Event booking inquiry and confirmed studio reservation.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "eventTitle": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "packageName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "eventDate": { "type": "string", "maxLength": 32 },
+        "eventTime": { "type": "string", "maxLength": 16 },
+        "venue": { "type": "string", "maxLength": 200 },
+        "totalPhp": { "type": "number" },
+        "depositPaidPhp": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending Deposit", "Confirmed", "Completed", "Cancelled"] },
+        "notes": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["ownerUid", "clientName", "eventTitle", "packageName", "status"]
+    },
+    "KnowledgeBaseItem": {
+      "title": "KnowledgeBaseItem",
+      "description": "Business knowledge base entry for packages, FAQs, services, and policies.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "category": { "type": "string", "enum": ["packages", "faqs", "services", "policies"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "details": { "type": "string", "minLength": 1, "maxLength": 3000 },
+        "pricePhp": { "type": "number" },
+        "durationOrLeadTime": { "type": "string", "maxLength": 120 },
+        "keywords": { "type": "array" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["ownerUid", "category", "title", "summary", "details", "active"]
+    },
+    "AutomationLog": {
+      "title": "AutomationLog",
+      "description": "Execution audit log for simulated and live Messenger automation runs.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "conversationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "workflowId": { "type": "string", "maxLength": 128 },
+        "workflowName": { "type": "string", "maxLength": 140 },
+        "matchedKbTitle": { "type": "string", "maxLength": 160 },
+        "channel": { "type": "string", "enum": ["Messenger (Simulated)", "Messenger (Live)"] },
+        "outcome": { "type": "string", "enum": ["replied", "handoff", "skipped_cooldown", "skipped_duplicate", "manual_only"] },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["ownerUid", "conversationId", "channel", "outcome", "createdAt"]
+    },
+    "WebhookDedup": {
+      "title": "WebhookDedup",
+      "description": "Server-only deduplication record for Meta webhook message IDs and cooldown tracking.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "psid": { "type": "string", "maxLength": 128 },
+        "processedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["eventId", "processedAt"]
+    }
+  },
+  "firestore": {
+    "/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/WorkspaceProfile" },
+      "description": "Workspace root document for Paper Dreams Cebu settings and ownership."
+    },
+    "/workspaces/{workspaceId}/members/{uid}": {
+      "schema": { "$ref": "#/entities/WorkspaceMember" },
+      "description": "Authorized operator member profiles and RBAC roles."
+    },
+    "/workspaces/{workspaceId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "Messenger conversation threads (live and simulated)."
+    },
+    "/workspaces/{workspaceId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Messages belonging to a specific conversation thread."
+    },
+    "/workspaces/{workspaceId}/workflows/{workflowId}": {
+      "schema": { "$ref": "#/entities/Workflow" },
+      "description": "Visual automation workflows."
+    },
+    "/workspaces/{workspaceId}/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "CRM contacts and leads."
+    },
+    "/workspaces/{workspaceId}/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Event bookings and inquiries."
+    },
+    "/workspaces/{workspaceId}/knowledgeBase/{itemId}": {
+      "schema": { "$ref": "#/entities/KnowledgeBaseItem" },
+      "description": "Business Knowledge Base packages, FAQs, services, and policies."
+    },
+    "/workspaces/{workspaceId}/automationLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AutomationLog" },
+      "description": "Automation execution logs for live and simulated runs."
+    },
+    "/workspaces/{workspaceId}/webhookDedup/{eventId}": {
+      "schema": { "$ref": "#/entities/WebhookDedup" },
+      "description": "Server-only Meta webhook deduplication records (denied to client SDKs)."
+    }
+  }
+}

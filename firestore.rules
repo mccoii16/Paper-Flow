@@ -1,0 +1,439 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'martiligando@gmail.com';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isStringBounded(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isStringArrayBounded(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isWorkspaceOwnerOrMember(workspaceId) {
+      return isBootstrappedAdmin() ||
+        (
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid
+        ) ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function canClaimOwnership(data) {
+      return data.ownerUid == request.auth.uid || isBootstrappedAdmin();
+    }
+
+    // --- Validation Blueprints ---
+    function isValidWorkspaceProfile(data) {
+      return data.keys().hasAll(['ownerUid', 'businessName', 'currency']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'businessName', 'brandTagline', 'location', 'timezone',
+          'currency', 'operatingHours', 'defaultAiFallbackMessage', 'isDemoWorkspace',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.businessName, 1, 120) &&
+        data.currency == 'PHP' &&
+        (!('brandTagline' in data) || isStringBounded(data.brandTagline, 0, 240)) &&
+        (!('location' in data) || isStringBounded(data.location, 0, 160)) &&
+        (!('timezone' in data) || isStringBounded(data.timezone, 0, 64)) &&
+        (!('operatingHours' in data) || isStringBounded(data.operatingHours, 0, 160)) &&
+        (!('defaultAiFallbackMessage' in data) || isStringBounded(data.defaultAiFallbackMessage, 0, 1000)) &&
+        (!('isDemoWorkspace' in data) || data.isDemoWorkspace is bool) &&
+        (!('createdAt' in data) || isStringBounded(data.createdAt, 0, 64)) &&
+        (!('updatedAt' in data) || isStringBounded(data.updatedAt, 0, 64));
+    }
+
+    function isValidWorkspaceMember(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt']) &&
+        isStringBounded(data.uid, 1, 128) &&
+        isStringBounded(data.email, 3, 254) &&
+        data.role in ['Owner', 'Coordinator', 'Viewer'] &&
+        (!('displayName' in data) || isStringBounded(data.displayName, 0, 120)) &&
+        (!('createdAt' in data) || isStringBounded(data.createdAt, 0, 64));
+    }
+
+    function isValidConversation(data) {
+      return data.keys().hasAll(['ownerUid', 'leadId', 'guestName', 'aiEnabled', 'leadStatus', 'channel']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'leadId', 'psid', 'guestName', 'messengerHandle',
+          'avatarInitials', 'avatarTone', 'aiEnabled', 'leadStatus', 'tags',
+          'unreadCount', 'lastMessagePreview', 'lastMessageAt', 'channel',
+          'assignedOperator', 'needsHumanHandoff'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.leadId, 1, 128) &&
+        isStringBounded(data.guestName, 1, 120) &&
+        data.aiEnabled is bool &&
+        data.leadStatus in ['New Inquiry', 'Qualified', 'Proposal Sent', 'Booked', 'Needs Handoff', 'Archived'] &&
+        data.channel in ['Messenger (Simulated)', 'Messenger (Live)'] &&
+        (!('psid' in data) || isStringBounded(data.psid, 0, 128)) &&
+        (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
+        (!('avatarInitials' in data) || isStringBounded(data.avatarInitials, 1, 4)) &&
+        (!('avatarTone' in data) || data.avatarTone in ['pink', 'navy', 'slate', 'rose']) &&
+        (!('tags' in data) || isStringArrayBounded(data.tags, 20)) &&
+        (!('unreadCount' in data) || (data.unreadCount is number && data.unreadCount >= 0 && data.unreadCount <= 9999)) &&
+        (!('lastMessagePreview' in data) || isStringBounded(data.lastMessagePreview, 0, 500)) &&
+        (!('lastMessageAt' in data) || isStringBounded(data.lastMessageAt, 0, 64)) &&
+        (!('assignedOperator' in data) || isStringBounded(data.assignedOperator, 0, 120)) &&
+        (!('needsHumanHandoff' in data) || data.needsHumanHandoff is bool);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['ownerUid', 'conversationId', 'sender', 'senderName', 'text', 'timestamp']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'conversationId', 'externalMid', 'sender', 'senderName',
+          'text', 'timestamp', 'isSimulated', 'matchedKbTitle', 'matchedWorkflowName'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.conversationId, 1, 128) &&
+        data.sender in ['guest', 'operator', 'ai_sim', 'ai_live', 'system'] &&
+        isStringBounded(data.senderName, 1, 120) &&
+        isStringBounded(data.text, 1, 4000) &&
+        isStringBounded(data.timestamp, 1, 64) &&
+        (!('externalMid' in data) || isStringBounded(data.externalMid, 0, 200)) &&
+        (!('isSimulated' in data) || data.isSimulated is bool) &&
+        (!('matchedKbTitle' in data) || isStringBounded(data.matchedKbTitle, 0, 200)) &&
+        (!('matchedWorkflowName' in data) || isStringBounded(data.matchedWorkflowName, 0, 200));
+    }
+
+    function isValidWorkflow(data) {
+      return data.keys().hasAll(['ownerUid', 'name', 'status', 'nodes', 'edges']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'name', 'description', 'status', 'triggerSummary',
+          'runsSimulated', 'handoffRatePct', 'updatedAt', 'nodes', 'edges'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.name, 1, 140) &&
+        data.status in ['Active', 'Paused', 'Draft'] &&
+        data.nodes is list && data.nodes.size() <= 50 &&
+        data.edges is list && data.edges.size() <= 100 &&
+        (!('description' in data) || isStringBounded(data.description, 0, 500)) &&
+        (!('triggerSummary' in data) || isStringBounded(data.triggerSummary, 0, 300)) &&
+        (!('runsSimulated' in data) || (data.runsSimulated is number && data.runsSimulated >= 0)) &&
+        (!('handoffRatePct' in data) || (data.handoffRatePct is number && data.handoffRatePct >= 0 && data.handoffRatePct <= 100)) &&
+        (!('updatedAt' in data) || isStringBounded(data.updatedAt, 0, 64));
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll(['ownerUid', 'name', 'status', 'source']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'psid', 'name', 'messengerHandle', 'email', 'phone',
+          'eventType', 'eventDate', 'venue', 'estimatedValuePhp', 'status',
+          'tags', 'source', 'lastContactAt', 'notes'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.name, 1, 120) &&
+        data.status in ['New Inquiry', 'Qualified', 'Proposal Sent', 'Booked', 'Needs Handoff', 'Archived'] &&
+        data.source in ['Messenger (Simulated)', 'Messenger (Live)', 'Instagram DM (Planned)', 'Manual Entry'] &&
+        (!('psid' in data) || isStringBounded(data.psid, 0, 128)) &&
+        (!('messengerHandle' in data) || isStringBounded(data.messengerHandle, 0, 120)) &&
+        (!('email' in data) || isStringBounded(data.email, 0, 254)) &&
+        (!('phone' in data) || isStringBounded(data.phone, 0, 40)) &&
+        (!('eventType' in data) || isStringBounded(data.eventType, 0, 120)) &&
+        (!('eventDate' in data) || isStringBounded(data.eventDate, 0, 32)) &&
+        (!('venue' in data) || isStringBounded(data.venue, 0, 200)) &&
+        (!('estimatedValuePhp' in data) || (data.estimatedValuePhp is number && data.estimatedValuePhp >= 0)) &&
+        (!('tags' in data) || isStringArrayBounded(data.tags, 20)) &&
+        (!('lastContactAt' in data) || isStringBounded(data.lastContactAt, 0, 64)) &&
+        (!('notes' in data) || isStringBounded(data.notes, 0, 2000));
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['ownerUid', 'clientName', 'eventTitle', 'packageName', 'status']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'leadId', 'clientName', 'eventTitle', 'packageName',
+          'eventDate', 'eventTime', 'venue', 'totalPhp', 'depositPaidPhp',
+          'status', 'notes'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.clientName, 1, 120) &&
+        isStringBounded(data.eventTitle, 1, 160) &&
+        isStringBounded(data.packageName, 1, 160) &&
+        data.status in ['Pending Deposit', 'Confirmed', 'Completed', 'Cancelled'] &&
+        (!('leadId' in data) || isStringBounded(data.leadId, 0, 128)) &&
+        (!('eventDate' in data) || isStringBounded(data.eventDate, 0, 32)) &&
+        (!('eventTime' in data) || isStringBounded(data.eventTime, 0, 16)) &&
+        (!('venue' in data) || isStringBounded(data.venue, 0, 200)) &&
+        (!('totalPhp' in data) || (data.totalPhp is number && data.totalPhp >= 0)) &&
+        (!('depositPaidPhp' in data) || (data.depositPaidPhp is number && data.depositPaidPhp >= 0)) &&
+        (!('notes' in data) || isStringBounded(data.notes, 0, 2000));
+    }
+
+    function isValidKnowledgeItem(data) {
+      return data.keys().hasAll(['ownerUid', 'category', 'title', 'summary', 'details', 'active']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'category', 'title', 'summary', 'details',
+          'pricePhp', 'durationOrLeadTime', 'keywords', 'updatedAt', 'active'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        data.category in ['packages', 'faqs', 'services', 'policies'] &&
+        isStringBounded(data.title, 1, 160) &&
+        isStringBounded(data.summary, 1, 400) &&
+        isStringBounded(data.details, 1, 3000) &&
+        data.active is bool &&
+        (!('pricePhp' in data) || (data.pricePhp is number && data.pricePhp >= 0)) &&
+        (!('durationOrLeadTime' in data) || isStringBounded(data.durationOrLeadTime, 0, 120)) &&
+        (!('keywords' in data) || isStringArrayBounded(data.keywords, 30)) &&
+        (!('updatedAt' in data) || isStringBounded(data.updatedAt, 0, 64));
+    }
+
+    function isValidAutomationLog(data) {
+      return data.keys().hasAll(['ownerUid', 'conversationId', 'channel', 'outcome', 'createdAt']) &&
+        data.keys().hasOnly([
+          'ownerUid', 'conversationId', 'workflowId', 'workflowName',
+          'matchedKbTitle', 'channel', 'outcome', 'createdAt'
+        ]) &&
+        isStringBounded(data.ownerUid, 1, 128) &&
+        isStringBounded(data.conversationId, 1, 128) &&
+        data.channel in ['Messenger (Simulated)', 'Messenger (Live)'] &&
+        data.outcome in ['replied', 'handoff', 'skipped_cooldown', 'skipped_duplicate', 'manual_only'] &&
+        isStringBounded(data.createdAt, 1, 64) &&
+        (!('workflowId' in data) || isStringBounded(data.workflowId, 0, 128)) &&
+        (!('workflowName' in data) || isStringBounded(data.workflowName, 0, 140)) &&
+        (!('matchedKbTitle' in data) || isStringBounded(data.matchedKbTitle, 0, 160));
+    }
+
+    // --- Collection Rules ---
+    match /workspaces/{workspaceId} {
+      allow get: if isVerifiedUser() && isValidId(workspaceId) && (
+        isBootstrappedAdmin() ||
+        (resource == null && workspaceId == 'ws-' + request.auth.uid) ||
+        (resource != null && existing().ownerUid == request.auth.uid) ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+      );
+      allow list: if isVerifiedUser() && (
+        isBootstrappedAdmin() ||
+        existing().ownerUid == request.auth.uid
+      );
+      allow create: if isVerifiedUser() && isValidId(workspaceId) &&
+        isValidWorkspaceProfile(incoming()) &&
+        canClaimOwnership(incoming());
+      allow update: if isVerifiedUser() && isValidId(workspaceId) &&
+        isValidWorkspaceProfile(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        (isBootstrappedAdmin() || existing().ownerUid == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'businessName', 'brandTagline', 'location', 'timezone',
+          'operatingHours', 'defaultAiFallbackMessage', 'isDemoWorkspace', 'updatedAt'
+        ]);
+      allow delete: if isBootstrappedAdmin() && isValidId(workspaceId);
+
+      // Workspace Members (RBAC)
+      match /members/{uid} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(uid) &&
+          (uid == request.auth.uid || isWorkspaceOwnerOrMember(workspaceId));
+        allow list: if isVerifiedUser() && isBootstrappedAdmin();
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(uid) &&
+          isValidWorkspaceMember(incoming()) &&
+          (isBootstrappedAdmin() ||
+           (exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+            get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid));
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(uid) &&
+          isValidWorkspaceMember(incoming()) &&
+          incoming().uid == existing().uid &&
+          isBootstrappedAdmin() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role']);
+        allow delete: if isBootstrappedAdmin() && isValidId(workspaceId) && isValidId(uid);
+      }
+
+      // Conversations
+      match /conversations/{conversationId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) &&
+          isValidConversation(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) &&
+          isValidConversation(incoming()) &&
+          incoming().ownerUid == existing().ownerUid &&
+          isWorkspaceOwnerOrMember(workspaceId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'guestName', 'aiEnabled', 'leadStatus', 'tags', 'unreadCount',
+            'lastMessagePreview', 'lastMessageAt', 'assignedOperator', 'needsHumanHandoff'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) &&
+          (isBootstrappedAdmin() || existing().ownerUid == request.auth.uid);
+
+        // Messages Subcollection
+        match /messages/{messageId} {
+          allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) && isValidId(messageId) &&
+            isWorkspaceOwnerOrMember(workspaceId);
+          allow list: if isVerifiedUser() && (
+            isBootstrappedAdmin() ||
+            existing().ownerUid == request.auth.uid
+          );
+          allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(conversationId) && isValidId(messageId) &&
+            isValidMessage(incoming()) &&
+            incoming().conversationId == conversationId &&
+            canClaimOwnership(incoming()) &&
+            exists(/databases/$(database)/documents/workspaces/$(workspaceId)/conversations/$(conversationId)) &&
+            isWorkspaceOwnerOrMember(workspaceId);
+          allow update: if false;
+          allow delete: if isBootstrappedAdmin() && isValidId(workspaceId) && isValidId(conversationId) && isValidId(messageId);
+        }
+      }
+
+      // Workflows
+      match /workflows/{workflowId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(workflowId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(workflowId) &&
+          isValidWorkflow(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(workflowId) &&
+          isValidWorkflow(incoming()) &&
+          incoming().ownerUid == existing().ownerUid &&
+          isWorkspaceOwnerOrMember(workspaceId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'description', 'status', 'triggerSummary',
+            'runsSimulated', 'handoffRatePct', 'updatedAt', 'nodes', 'edges'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(workflowId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+      }
+
+      // Contacts & Leads (PII isolated to workspace owner / bootstrapped admin)
+      match /leads/{leadId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(leadId) && (
+          isBootstrappedAdmin() ||
+          (resource == null && isWorkspaceOwnerOrMember(workspaceId)) ||
+          (resource != null && existing().ownerUid == request.auth.uid)
+        );
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(leadId) &&
+          isValidLead(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(leadId) &&
+          isValidLead(incoming()) &&
+          incoming().ownerUid == existing().ownerUid &&
+          isWorkspaceOwnerOrMember(workspaceId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'messengerHandle', 'email', 'phone', 'eventType',
+            'eventDate', 'venue', 'estimatedValuePhp', 'status', 'tags',
+            'lastContactAt', 'notes'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(leadId) &&
+          (isBootstrappedAdmin() || existing().ownerUid == request.auth.uid);
+      }
+
+      // Bookings
+      match /bookings/{bookingId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(bookingId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(bookingId) &&
+          isValidBooking(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(bookingId) &&
+          isValidBooking(incoming()) &&
+          incoming().ownerUid == existing().ownerUid &&
+          isWorkspaceOwnerOrMember(workspaceId) &&
+          (isBootstrappedAdmin() || !(existing().status in ['Completed', 'Cancelled'])) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'leadId', 'clientName', 'eventTitle', 'packageName', 'eventDate',
+            'eventTime', 'venue', 'totalPhp', 'depositPaidPhp', 'status', 'notes'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(bookingId) &&
+          (isBootstrappedAdmin() || existing().ownerUid == request.auth.uid);
+      }
+
+      // Business Knowledge Base
+      match /knowledgeBase/{itemId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(itemId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(itemId) &&
+          isValidKnowledgeItem(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if isVerifiedUser() && isValidId(workspaceId) && isValidId(itemId) &&
+          isValidKnowledgeItem(incoming()) &&
+          incoming().ownerUid == existing().ownerUid &&
+          isWorkspaceOwnerOrMember(workspaceId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'category', 'title', 'summary', 'details', 'pricePhp',
+            'durationOrLeadTime', 'keywords', 'updatedAt', 'active'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(itemId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+      }
+
+      // Automation Logs
+      match /automationLogs/{logId} {
+        allow get: if isVerifiedUser() && isValidId(workspaceId) && isValidId(logId) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow list: if isVerifiedUser() && (
+          isBootstrappedAdmin() ||
+          existing().ownerUid == request.auth.uid
+        );
+        allow create: if isVerifiedUser() && isValidId(workspaceId) && isValidId(logId) &&
+          isValidAutomationLog(incoming()) &&
+          canClaimOwnership(incoming()) &&
+          isWorkspaceOwnerOrMember(workspaceId);
+        allow update: if false;
+        allow delete: if isBootstrappedAdmin() && isValidId(workspaceId) && isValidId(logId);
+      }
+
+      // Server-only Webhook Deduplication & Rate Limit Guards
+      match /webhookDedup/{eventId} {
+        allow read, write: if false;
+      }
+    }
+  }
+}

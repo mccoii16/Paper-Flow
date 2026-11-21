@@ -1,0 +1,861 @@
+{
+  "profile": {
+    "businessName": "Paper Dreams Cebu",
+    "brandTagline": "Bespoke Event Stationery, Keepsake Booths & Celebrations",
+    "location": "Cebu City, Philippines",
+    "timezone": "Asia/Manila (UTC+8)",
+    "currency": "PHP",
+    "operatingHours": "Mon–Sat, 9:00 AM – 7:00 PM PHT",
+    "defaultAiFallbackMessage": "Thank you for messaging Paper Dreams Cebu! Our studio coordinator will review your event details shortly and send a custom quote.",
+    "isDemoWorkspace": true
+  },
+  "conversations": [
+    {
+      "id": "conv-1",
+      "leadId": "lead-1",
+      "guestName": "Ysabel Villanueva",
+      "messengerHandle": "ysabel.villanueva",
+      "avatarInitials": "YV",
+      "avatarTone": "pink",
+      "aiEnabled": true,
+      "leadStatus": "Proposal Sent",
+      "tags": [
+        "Wedding",
+        "Mirror Booth",
+        "VIP"
+      ],
+      "unreadCount": 0,
+      "lastMessagePreview": "We look forward to celebrating with you in Cebu!",
+      "lastMessageAt": "2026-11-18T16:43:02.825Z",
+      "channel": "Messenger (Simulated)",
+      "assignedOperator": "Clarisse Mendoza",
+      "needsHumanHandoff": false,
+      "messages": [
+        {
+          "id": "msg-101",
+          "conversationId": "conv-1",
+          "sender": "guest",
+          "senderName": "Ysabel Villanueva",
+          "text": "Hello Paper Dreams Cebu! Asking for rates for our Dec 19 wedding at Shangri-La Mactan.",
+          "timestamp": "2026-11-18T08:12:00.000Z",
+          "isSimulated": true
+        },
+        {
+          "id": "msg-102",
+          "conversationId": "conv-1",
+          "sender": "ai_sim",
+          "senderName": "PaperFlow Auto-Reply (Simulated)",
+          "text": "Hi Ysabel! Congratulations on your upcoming wedding! Our Luxe Mirror Keepsake Booth is ₱18,500 for 3 hours (unlimited prints + velvet stanchions), and Mactan resort logistics is ₱1,200. Would you also like details on our Bespoke Stationery Suites?",
+          "timestamp": "2026-11-18T08:12:08.000Z",
+          "isSimulated": true,
+          "matchedKbTitle": "Luxe Mirror Keepsake Booth",
+          "matchedWorkflowName": "Package Inquiry & Quote Flow"
+        },
+        {
+          "id": "msg-103",
+          "conversationId": "conv-1",
+          "sender": "guest",
+          "senderName": "Ysabel Villanueva",
+          "text": "Hi! Could we pair the Luxe Mirror Booth with custom wax-sealed invites for Mactan?",
+          "timestamp": "2026-11-18T08:18:00.000Z",
+          "isSimulated": true
+        },
+        {
+          "id": "msg-1795020180057",
+          "conversationId": "conv-1",
+          "sender": "guest",
+          "senderName": "Ysabel Villanueva",
+          "text": "What is your GCash deposit policy?",
+          "timestamp": "2026-11-18T16:43:00.056Z",
+          "isSimulated": true
+        },
+        {
+          "id": "msg-ai-1795020180059",
+          "conversationId": "conv-1",
+          "sender": "ai_sim",
+          "senderName": "PaperFlow Auto-Reply (Simulated)",
+          "text": "Hi Ysabel! Here are our details for Booking Deposit & Balance Schedule: 30% reservation deposit locks your date; 70% balance is due 7 days before the event. Deposits are accepted via GCash, BPI, or UnionBank transfer. Official studio acknowledgement and event contract are issued upon verification. Deposits are non-refundable but transferable once to an available date within 6 months.",
+          "timestamp": "2026-11-18T16:43:00.856Z",
+          "isSimulated": true,
+          "matchedKbTitle": "Booking Deposit & Balance Schedule"
+        },
+        {
+          "id": "msg-1795020182825",
+          "conversationId": "conv-1",
+          "sender": "operator",
+          "senderName": "Clarisse Mendoza",
+          "text": "We look forward to celebrating with you in Cebu!",
+          "timestamp": "2026-11-18T16:43:02.825Z",
+          "isSimulated": true
+        }
+      ]
+    },
+    {
+      "id": "conv-2",
+      "leadId": "lead-3",
+      "guestName": "Camille Ortega",
+      "messengerHandle": "camille.ortega",
+      "avatarInitials": "CO",
+      "avatarTone": "navy",
+      "aiEnabled": false,
+      "leadStatus": "Needs Handoff",
+      "tags": [
+        "Corporate",
+        "Magnetic Bar",
+        "Rush"
+      ],
+      "unreadCount": 2,
+      "lastMessagePreview": "We need 2 magnetic portrait stations and BIR official invoice for Dec 11 at NUSTAR.",
+      "lastMessageAt": "2026-11-18T08:05:00.000Z",
+      "channel": "Messenger (Simulated)",
+      "assignedOperator": "Clarisse Mendoza",
+      "needsHumanHandoff": true,
+      "messages": [
+        {
+          "id": "msg-201",
+          "conversationId": "conv-2",
+          "sender": "guest",
+          "senderName": "Camille Ortega",
+          "text": "Hi, do you handle corporate year-end events for 300 employees?",
+          "timestamp": "2026-11-18T08:01:00.000Z",
+          "isSimulated": true
+        },
+        {
+          "id": "msg-202",
+          "conversationId": "conv-2",
+          "sender": "ai_sim",
+          "senderName": "PaperFlow Auto-Reply (Simulated)",
+          "text": "Yes, we love corporate galas! Our Magnetic Portrait & Souvenir Bar starts at ₱14,500. Let me connect you with our Cebu studio coordinator for multi-station pricing.",
+          "timestamp": "2026-11-18T08:01:12.000Z",
+          "isSimulated": true,
+          "matchedWorkflowName": "Corporate & Rush Handoff"
+        },
+        {
+          "id": "msg-203",
+          "conversationId": "conv-2",
+          "sender": "guest",
+          "senderName": "Camille Ortega",
+          "text": "We need 2 magnetic portrait stations and BIR official invoice for Dec 11 at NUSTAR.",
+          "timestamp": "2026-11-18T08:05:00.000Z",
+          "isSimulated": true
+        }
+      ]
+    },
+    {
+      "id": "conv-3",
+      "leadId": "lead-2",
+      "guestName": "Marco & Bea Tan",
+      "messengerHandle": "marco.tan.cebu",
+      "avatarInitials": "MB",
+      "avatarTone": "rose",
+      "aiEnabled": true,
+      "leadStatus": "Booked",
+      "tags": [
+        "Debut",
+        "Mirror Booth",
+        "Soft Pink Motif"
+      ],
+      "unreadCount": 0,
+      "lastMessagePreview": "Noted! We sent the 30% GCash deposit screenshot for Jan 24.",
+      "lastMessageAt": "2026-11-18T07:45:00.000Z",
+      "channel": "Messenger (Simulated)",
+      "assignedOperator": "Clarisse Mendoza",
+      "needsHumanHandoff": false,
+      "messages": [
+        {
+          "id": "msg-301",
+          "conversationId": "conv-3",
+          "sender": "guest",
+          "senderName": "Marco & Bea Tan",
+          "text": "Noted! We sent the 30% GCash deposit screenshot for Jan 24.",
+          "timestamp": "2026-11-18T07:45:00.000Z",
+          "isSimulated": true
+        },
+        {
+          "id": "msg-302",
+          "conversationId": "conv-3",
+          "sender": "operator",
+          "senderName": "Clarisse Mendoza",
+          "text": "Received with thanks! Your Jan 24 date at Radisson Blu is officially locked. Our design team will share your soft pink debut monogram 10 days before the event.",
+          "timestamp": "2026-11-18T07:48:00.000Z",
+          "isSimulated": true
+        }
+      ]
+    },
+    {
+      "id": "conv-4",
+      "leadId": "lead-5",
+      "guestName": "Rafael Navarro",
+      "messengerHandle": "rafael.navarro",
+      "avatarInitials": "RN",
+      "avatarTone": "slate",
+      "aiEnabled": true,
+      "leadStatus": "New Inquiry",
+      "tags": [
+        "Birthday",
+        "Magnetic Bar"
+      ],
+      "unreadCount": 1,
+      "lastMessagePreview": "How much is your souvenir magnet booth for a baptismal at Oakridge?",
+      "lastMessageAt": "2026-11-18T06:50:00.000Z",
+      "channel": "Messenger (Simulated)",
+      "needsHumanHandoff": false,
+      "messages": [
+        {
+          "id": "msg-401",
+          "conversationId": "conv-4",
+          "sender": "guest",
+          "senderName": "Rafael Navarro",
+          "text": "How much is your souvenir magnet booth for a baptismal at Oakridge?",
+          "timestamp": "2026-11-18T06:50:00.000Z",
+          "isSimulated": true
+        }
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "id": "wf-1",
+      "name": "Package Inquiry & Quote Flow",
+      "description": "Detects booth or stationery rate questions, replies with KB pricing, collects event date, and qualifies lead.",
+      "status": "Active",
+      "triggerSummary": "Keyword contains \"package\", \"price\", \"rate\", \"booth\"",
+      "runsSimulated": 142,
+      "handoffRatePct": 18,
+      "updatedAt": "2026-11-16",
+      "nodes": [
+        {
+          "id": "n-1",
+          "type": "trigger",
+          "title": "Messenger Package Keyword",
+          "x": 60,
+          "y": 160,
+          "config": {
+            "triggerEvent": "keyword_match",
+            "keywords": [
+              "package",
+              "price",
+              "rate",
+              "booth",
+              "mirror",
+              "stationery"
+            ]
+          }
+        },
+        {
+          "id": "n-2",
+          "type": "condition",
+          "title": "Check Wedding or Debut",
+          "x": 340,
+          "y": 160,
+          "config": {
+            "conditionField": "message_text",
+            "conditionOperator": "contains",
+            "conditionValue": "wedding"
+          }
+        },
+        {
+          "id": "n-3",
+          "type": "send_reply",
+          "title": "Send Wedding Package Quote",
+          "x": 640,
+          "y": 60,
+          "config": {
+            "replyText": "Hi {{first_name}}! Our Luxe Mirror Keepsake Booth is ₱18,500 (3 hrs) and Bespoke Stationery Suites start at ₱24,000. Let us check your date!",
+            "useKnowledgeBase": true
+          }
+        },
+        {
+          "id": "n-4",
+          "type": "send_reply",
+          "title": "Send General Event Packages",
+          "x": 640,
+          "y": 280,
+          "config": {
+            "replyText": "Hello {{first_name}}! Thanks for reaching Paper Dreams Cebu. Mirror Booth packages start at ₱18,500 and Magnetic Souvenir Bars at ₱14,500.",
+            "useKnowledgeBase": true
+          }
+        },
+        {
+          "id": "n-5",
+          "type": "collect_info",
+          "title": "Ask Event Date & Venue",
+          "x": 940,
+          "y": 160,
+          "config": {
+            "promptText": "What is your target event date and Cebu venue so we can confirm studio slot availability?",
+            "targetField": "event_date"
+          }
+        },
+        {
+          "id": "n-6",
+          "type": "update_lead",
+          "title": "Mark Lead Qualified",
+          "x": 1220,
+          "y": 160,
+          "config": {
+            "newLeadStatus": "Qualified",
+            "addTags": [
+              "Package Inquiry"
+            ]
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-1",
+          "source": "n-1",
+          "target": "n-2",
+          "branch": "default"
+        },
+        {
+          "id": "e-2",
+          "source": "n-2",
+          "target": "n-3",
+          "branch": "true",
+          "label": "True"
+        },
+        {
+          "id": "e-3",
+          "source": "n-2",
+          "target": "n-4",
+          "branch": "false",
+          "label": "False"
+        },
+        {
+          "id": "e-4",
+          "source": "n-3",
+          "target": "n-5",
+          "branch": "default"
+        },
+        {
+          "id": "e-5",
+          "source": "n-4",
+          "target": "n-5",
+          "branch": "default"
+        },
+        {
+          "id": "e-6",
+          "source": "n-5",
+          "target": "n-6",
+          "branch": "default"
+        }
+      ]
+    },
+    {
+      "id": "wf-2",
+      "name": "Corporate & Rush Handoff",
+      "description": "Routes corporate invoicing, multi-booth requests, or rush events directly to a human coordinator.",
+      "status": "Active",
+      "triggerSummary": "Keyword contains \"corporate\", \"invoice\", \"rush\", \"BIR\"",
+      "runsSimulated": 38,
+      "handoffRatePct": 92,
+      "updatedAt": "2026-11-15",
+      "nodes": [
+        {
+          "id": "c-1",
+          "type": "trigger",
+          "title": "Corporate / Rush Keyword",
+          "x": 80,
+          "y": 160,
+          "config": {
+            "triggerEvent": "keyword_match",
+            "keywords": [
+              "corporate",
+              "rush",
+              "invoice",
+              "bir",
+              "urgent"
+            ]
+          }
+        },
+        {
+          "id": "c-2",
+          "type": "update_lead",
+          "title": "Tag Corporate & Needs Handoff",
+          "x": 380,
+          "y": 160,
+          "config": {
+            "newLeadStatus": "Needs Handoff",
+            "addTags": [
+              "Corporate",
+              "Priority"
+            ]
+          }
+        },
+        {
+          "id": "c-3",
+          "type": "human_handoff",
+          "title": "Assign Studio Coordinator",
+          "x": 700,
+          "y": 160,
+          "config": {
+            "handoffTeam": "Clarisse Mendoza (Studio Lead)",
+            "handoffNote": "Corporate or rush inquiry requires manual quotation & BIR billing check.",
+            "pauseAi": true
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "ce-1",
+          "source": "c-1",
+          "target": "c-2",
+          "branch": "default"
+        },
+        {
+          "id": "ce-2",
+          "source": "c-2",
+          "target": "c-3",
+          "branch": "default"
+        }
+      ]
+    },
+    {
+      "id": "wf-3",
+      "name": "Mactan & Out-of-Town FAQ Flow",
+      "description": "Answers transport fee questions using the Business Knowledge Base before capturing venue details.",
+      "status": "Paused",
+      "triggerSummary": "Keyword contains \"mactan\", \"transport\", \"venue\"",
+      "runsSimulated": 64,
+      "handoffRatePct": 11,
+      "updatedAt": "2026-11-10",
+      "nodes": [
+        {
+          "id": "m-1",
+          "type": "trigger",
+          "title": "Venue / Transport Trigger",
+          "x": 80,
+          "y": 160,
+          "config": {
+            "triggerEvent": "keyword_match",
+            "keywords": [
+              "mactan",
+              "lapu",
+              "transport",
+              "out of town"
+            ]
+          }
+        },
+        {
+          "id": "m-2",
+          "type": "send_reply",
+          "title": "Send Cebu Logistics Rates",
+          "x": 400,
+          "y": 160,
+          "config": {
+            "replyText": "Cebu City & Mandaue setups have ₱0 transport fee! Mactan Island resorts are ₱1,200, and South/North Cebu venues range from ₱2,500–₱4,500.",
+            "useKnowledgeBase": true
+          }
+        },
+        {
+          "id": "m-3",
+          "type": "collect_info",
+          "title": "Collect Exact Venue Name",
+          "x": 720,
+          "y": 160,
+          "config": {
+            "promptText": "Which hotel or reception venue are you eyeing?",
+            "targetField": "venue"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "me-1",
+          "source": "m-1",
+          "target": "m-2",
+          "branch": "default"
+        },
+        {
+          "id": "me-2",
+          "source": "m-2",
+          "target": "m-3",
+          "branch": "default"
+        }
+      ]
+    }
+  ],
+  "leads": [
+    {
+      "id": "lead-1",
+      "name": "Ysabel Villanueva",
+      "messengerHandle": "ysabel.villanueva (Simulated)",
+      "email": "ysabel.v@example.com",
+      "phone": "+63 917 442 8190",
+      "eventType": "Wedding Reception",
+      "eventDate": "2026-12-19",
+      "venue": "Shangri-La Mactan, Cebu",
+      "estimatedValuePhp": 42500,
+      "status": "Proposal Sent",
+      "tags": [
+        "Wedding",
+        "Mirror Booth",
+        "VIP"
+      ],
+      "source": "Messenger (Simulated)",
+      "lastContactAt": "2026-11-18T16:43:00.856Z",
+      "notes": "Interested in Luxe Mirror Booth + Bespoke Stationery Suite for 120 guests."
+    },
+    {
+      "id": "lead-2",
+      "name": "Marco & Bea Tan",
+      "messengerHandle": "marco.tan.cebu (Simulated)",
+      "email": "bea.tan@example.com",
+      "phone": "+63 918 551 0324",
+      "eventType": "18th Debut Celebration",
+      "eventDate": "2027-01-24",
+      "venue": "Radisson Blu Cebu",
+      "estimatedValuePhp": 18500,
+      "status": "Booked",
+      "tags": [
+        "Debut",
+        "Mirror Booth",
+        "Soft Pink Motif"
+      ],
+      "source": "Messenger (Simulated)",
+      "lastContactAt": "2026-11-18T07:45:00.000Z",
+      "notes": "Deposit verified. Needs custom blush floral monogram template."
+    },
+    {
+      "id": "lead-3",
+      "name": "Camille Ortega",
+      "messengerHandle": "camille.ortega (Simulated)",
+      "email": "cortega@cebutech.example.com",
+      "phone": "+63 927 890 1122",
+      "eventType": "Corporate Year-End Gala",
+      "eventDate": "2026-12-11",
+      "venue": "NUSTAR Convention Center",
+      "estimatedValuePhp": 29000,
+      "status": "Needs Handoff",
+      "tags": [
+        "Corporate",
+        "Magnetic Bar",
+        "Rush"
+      ],
+      "source": "Messenger (Simulated)",
+      "lastContactAt": "2026-11-18T08:05:00.000Z",
+      "notes": "Requested VAT official receipt and 2 simultaneous magnet stations for 300 pax."
+    },
+    {
+      "id": "lead-4",
+      "name": "Patricia Lim-Sy",
+      "messengerHandle": "patricia.limsy (Simulated)",
+      "email": "patricia.ls@example.com",
+      "phone": "+63 917 303 9981",
+      "eventType": "Intimate Garden Wedding",
+      "eventDate": "2027-02-14",
+      "venue": "Chateau by the Sea, Mactan",
+      "estimatedValuePhp": 24000,
+      "status": "Qualified",
+      "tags": [
+        "Wedding",
+        "Stationery"
+      ],
+      "source": "Messenger (Simulated)",
+      "lastContactAt": "2026-11-17T16:20:00.000Z",
+      "notes": "Asked for cotton paper swatches and wax seal color chart."
+    },
+    {
+      "id": "lead-5",
+      "name": "Rafael Navarro",
+      "messengerHandle": "rafael.navarro (Simulated)",
+      "email": "r.navarro@example.com",
+      "phone": "+63 995 114 7820",
+      "eventType": "Baptismal & 1st Birthday",
+      "eventDate": "2026-12-06",
+      "venue": "Oakridge Pavilion, Mandaue",
+      "estimatedValuePhp": 14500,
+      "status": "New Inquiry",
+      "tags": [
+        "Birthday",
+        "Magnetic Bar"
+      ],
+      "source": "Messenger (Simulated)",
+      "lastContactAt": "2026-11-18T06:50:00.000Z",
+      "notes": "First inquiry came through package keyword trigger."
+    },
+    {
+      "id": "lead-6",
+      "name": "Angela & Paolo Go",
+      "messengerHandle": "angela.go.events (Simulated)",
+      "email": "angelago@example.com",
+      "phone": "+63 917 772 4401",
+      "eventType": "Silver Anniversary Dinner",
+      "eventDate": "2027-03-08",
+      "venue": "Marco Polo Plaza Cebu",
+      "estimatedValuePhp": 22300,
+      "status": "Booked",
+      "tags": [
+        "Anniversary",
+        "Mirror Booth",
+        "Guestbook"
+      ],
+      "source": "Manual Entry",
+      "lastContactAt": "2026-11-16T11:30:00.000Z",
+      "notes": "Confirmed Luxe Mirror Booth + Polaroid Guestbook add-on."
+    }
+  ],
+  "bookings": [
+    {
+      "id": "bk-1",
+      "leadId": "lead-2",
+      "clientName": "Marco & Bea Tan",
+      "eventTitle": "Bea's 18th Blush Garden Debut",
+      "packageName": "Luxe Mirror Keepsake Booth",
+      "eventDate": "2027-01-24",
+      "eventTime": "17:30",
+      "venue": "Radisson Blu Cebu",
+      "totalPhp": 18500,
+      "depositPaidPhp": 5550,
+      "status": "Confirmed",
+      "notes": "Soft pink floral monogram approved; ingress at 4:00 PM."
+    },
+    {
+      "id": "bk-2",
+      "leadId": "lead-6",
+      "clientName": "Angela & Paolo Go",
+      "eventTitle": "Go Silver Anniversary Gala",
+      "packageName": "Luxe Mirror Keepsake Booth + Guestbook",
+      "eventDate": "2027-03-08",
+      "eventTime": "18:00",
+      "venue": "Marco Polo Plaza Cebu",
+      "totalPhp": 22300,
+      "depositPaidPhp": 6690,
+      "status": "Confirmed",
+      "notes": "Includes Polaroid linen guestbook add-on."
+    },
+    {
+      "id": "bk-3",
+      "leadId": "lead-1",
+      "clientName": "Ysabel Villanueva",
+      "eventTitle": "Villanueva–Reyes Wedding",
+      "packageName": "Luxe Mirror Keepsake Booth + Stationery Suite",
+      "eventDate": "2026-12-19",
+      "eventTime": "16:30",
+      "venue": "Shangri-La Mactan, Cebu",
+      "totalPhp": 43700,
+      "depositPaidPhp": 0,
+      "status": "Pending Deposit",
+      "notes": "Includes ₱1,200 Mactan transport fee. Awaiting 30% reservation transfer."
+    },
+    {
+      "id": "bk-4",
+      "leadId": "lead-3",
+      "clientName": "Camille Ortega (CebuTech)",
+      "eventTitle": "CebuTech Year-End Awards Night",
+      "packageName": "Dual Magnetic Portrait & Souvenir Bar",
+      "eventDate": "2026-12-11",
+      "eventTime": "19:00",
+      "venue": "NUSTAR Convention Center",
+      "totalPhp": 29000,
+      "depositPaidPhp": 0,
+      "status": "Pending Deposit",
+      "notes": "Coordinator reviewing BIR official invoice requirements."
+    },
+    {
+      "id": "bk-5",
+      "clientName": "Katrina & Miguel Santos",
+      "eventTitle": "Santos Intimate Wedding",
+      "packageName": "Bespoke Wedding Stationery Suite",
+      "eventDate": "2026-11-14",
+      "eventTime": "15:00",
+      "venue": "Circa 1900, Cebu City",
+      "totalPhp": 24000,
+      "depositPaidPhp": 24000,
+      "status": "Completed",
+      "notes": "100 cotton foil invitation suites delivered on schedule."
+    }
+  ],
+  "knowledgeBase": [
+    {
+      "id": "kb-1795020286749",
+      "category": "packages",
+      "title": "Garden Acrylic Welcome Sign",
+      "summary": "Custom frosted acrylic signage with floral stand.",
+      "details": "Includes custom calligraphy vinyl lettering and easel rental in Cebu City.",
+      "pricePhp": 15000,
+      "durationOrLeadTime": "",
+      "keywords": [
+        "signage",
+        "acrylic",
+        "welcome"
+      ],
+      "updatedAt": "2026-11-18",
+      "active": true
+    },
+    {
+      "id": "kb-pkg-1",
+      "category": "packages",
+      "title": "Luxe Mirror Keepsake Booth",
+      "summary": "3-hour full-length interactive mirror booth with custom Paper Dreams print frames & velvet stanchions.",
+      "details": "Includes 3 hours unlimited 4R/strip prints on pearl cardstock, custom monogram layout designed by our Cebu studio, gold or blush velvet stanchions, studio lighting, 2 uniformed attendants, and same-day digital gallery link.",
+      "pricePhp": 18500,
+      "durationOrLeadTime": "3 hours event coverage",
+      "keywords": [
+        "mirror",
+        "luxe",
+        "photobooth",
+        "photo booth",
+        "booth",
+        "package",
+        "price",
+        "rate"
+      ],
+      "updatedAt": "2026-11-12",
+      "active": true
+    },
+    {
+      "id": "kb-pkg-2",
+      "category": "packages",
+      "title": "Bespoke Wedding Stationery Suite",
+      "summary": "Custom letterpress & foil-stamped invitation suite for 80–150 guests.",
+      "details": "Includes main invitation card on 350gsm cotton paper, RSVP & details insert, custom venue illustration, wax-sealed blush or navy envelopes, and gold foil monogramming. Minimum order 50 sets.",
+      "pricePhp": 24000,
+      "durationOrLeadTime": "3–4 weeks production",
+      "keywords": [
+        "invitation",
+        "stationery",
+        "wedding",
+        "suite",
+        "foil",
+        "wax",
+        "cards",
+        "invites"
+      ],
+      "updatedAt": "2026-11-14",
+      "active": true
+    },
+    {
+      "id": "kb-pkg-3",
+      "category": "packages",
+      "title": "Magnetic Portrait & Souvenir Bar",
+      "summary": "Live portrait printing onto keepsake acrylic & magnet frames for debuts and corporate galas.",
+      "details": "2.5 hours continuous service with curated tabletop backdrop, live color-graded portraits printed directly as keepsake magnets (up to 150 pcs), plus custom event sleeve packaging.",
+      "pricePhp": 14500,
+      "durationOrLeadTime": "2.5 hours event coverage",
+      "keywords": [
+        "magnet",
+        "magnetic",
+        "souvenir",
+        "debut",
+        "corporate",
+        "favor",
+        "keepsake"
+      ],
+      "updatedAt": "2026-11-10",
+      "active": true
+    },
+    {
+      "id": "kb-faq-1",
+      "category": "faqs",
+      "title": "Do you cover venues outside Cebu City (Mactan, Lapu-Lapu, South Cebu)?",
+      "summary": "Yes—we cover Metro Cebu, Mactan Island, and South/North Cebu with transparent transport fees.",
+      "details": "Cebu City & Mandaue venues have ₱0 transport fee. Mactan / Lapu-Lapu resorts (Shangri-La, Crimson, Dusit Thani) incur a ₱1,200 logistics fee. Out-of-town Cebu events (Moalboal, Carcar, Bogo) are quoted ₱2,500–₱4,500 depending on distance.",
+      "keywords": [
+        "mactan",
+        "lapu",
+        "location",
+        "transport",
+        "out of town",
+        "venue",
+        "fee",
+        "cebu",
+        "where"
+      ],
+      "updatedAt": "2026-11-15",
+      "active": true
+    },
+    {
+      "id": "kb-faq-2",
+      "category": "faqs",
+      "title": "How early should we reserve our event date?",
+      "summary": "We recommend booking 4–8 weeks ahead for booths and 6–8 weeks for custom stationery.",
+      "details": "Peak wedding and debut months (December, January, May, June) fill quickly. Rush stationery orders under 14 days may be accommodated with a 20% rush production fee subject to slot availability.",
+      "keywords": [
+        "book",
+        "reserve",
+        "availability",
+        "date",
+        "rush",
+        "early",
+        "when",
+        "schedule"
+      ],
+      "updatedAt": "2026-11-11",
+      "active": true
+    },
+    {
+      "id": "kb-srv-1",
+      "category": "services",
+      "title": "Custom Monogram & Print Template Design",
+      "summary": "Tailored event crest, typography matching, and 4R print border design included with booths.",
+      "details": "Our graphic studio prepares up to 2 layout revisions aligned with your motif (soft pink, navy, sage, champagne) 10 days prior to your event.",
+      "durationOrLeadTime": "5 business days turnaround",
+      "keywords": [
+        "monogram",
+        "design",
+        "template",
+        "layout",
+        "custom",
+        "motif"
+      ],
+      "updatedAt": "2026-11-08",
+      "active": true
+    },
+    {
+      "id": "kb-srv-2",
+      "category": "services",
+      "title": "Live Guestbook & Polaroid Keepsake Station",
+      "summary": "Attendant-assisted photo guestbook with metallic pens, archival tape, and linen album.",
+      "details": "Adds a duplicate print strip per guest session so guests sign their personal note directly inside a hardcover linen keepsake book.",
+      "pricePhp": 3800,
+      "durationOrLeadTime": "Add-on service",
+      "keywords": [
+        "guestbook",
+        "polaroid",
+        "album",
+        "add-on",
+        "addon"
+      ],
+      "updatedAt": "2026-11-09",
+      "active": true
+    },
+    {
+      "id": "kb-pol-1",
+      "category": "policies",
+      "title": "Booking Deposit & Balance Schedule",
+      "summary": "30% reservation deposit locks your date; 70% balance is due 7 days before the event.",
+      "details": "Deposits are accepted via GCash, BPI, or UnionBank transfer. Official studio acknowledgement and event contract are issued upon verification. Deposits are non-refundable but transferable once to an available date within 6 months.",
+      "keywords": [
+        "deposit",
+        "downpayment",
+        "payment",
+        "gcash",
+        "bank",
+        "policy",
+        "refund",
+        "cancel"
+      ],
+      "updatedAt": "2026-11-16",
+      "active": true
+    },
+    {
+      "id": "kb-pol-2",
+      "category": "policies",
+      "title": "Setup Ingress & Power Requirements",
+      "summary": "Team arrives 90 minutes prior to call time and requires a 2.5m × 2.5m space with 220V outlet.",
+      "details": "Client or venue coordinator arranges supplier ingress permits at least 48 hours prior. Outdoor setups require a shaded tent or covered pavilion to protect printers and studio strobes.",
+      "keywords": [
+        "ingress",
+        "setup",
+        "power",
+        "outdoor",
+        "space",
+        "requirements"
+      ],
+      "updatedAt": "2026-11-05",
+      "active": true
+    }
+  ]
+}

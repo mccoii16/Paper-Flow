@@ -1,0 +1,6 @@
+{
+  "name": "PaperFlow — Paper Dreams Cebu",
+  "description": "Private Messenger automation dashboard, unified inbox, visual workflow builder, CRM, bookings, and business knowledge base for Paper Dreams Cebu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

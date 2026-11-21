@@ -11,7 +11,7 @@ import {
   handleMetaWebhookPost,
   sendJson,
   type NodeApiRequest,
-} from './server/apiCore';
+} from './server/apiCore.js';
 
 dotenv.config();
 

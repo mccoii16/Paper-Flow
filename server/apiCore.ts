@@ -1,14 +1,9 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  getAdminFirestore,
-  getFirebaseRuntimeConfig,
-  verifyFirebaseBearerToken,
-} from './firebaseAdmin';
-import { processIncomingMetaEvent, sendMetaMessengerMessage } from './metaMessenger';
-import { verifyMetaSignature, type MetaMessagingEvent } from './webhookSafeguards';
-import { resolveWorkspaceIdForUser } from '../src/services/firebaseBlueprint';
-import type { BackendHealthStatus, Message } from '../src/types/paperflow';
+import { getFirebaseRuntimeConfig } from './firebaseConfig.js';
+import { verifyMetaSignature, type MetaMessagingEvent } from './webhookSafeguards.js';
+import { resolveWorkspaceIdForUser } from '../src/services/firebaseBlueprint.js';
+import type { BackendHealthStatus, Message } from '../src/types/paperflow.js';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB hard cap
 
@@ -74,31 +69,38 @@ export async function readRawRequestBody(req: NodeApiRequest): Promise<Buffer> {
   if (Buffer.isBuffer(req.rawBody)) {
     return req.rawBody;
   }
+
+  if (!req.readableEnded) {
+    return new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+
+      req.on('data', (chunk: Buffer | string) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        totalBytes += buf.length;
+        if (totalBytes > MAX_BODY_BYTES) {
+          reject(new Error('PAYLOAD_TOO_LARGE'));
+          req.destroy();
+          return;
+        }
+        chunks.push(buf);
+      });
+
+      req.on('end', () => resolve(Buffer.concat(chunks)));
+      req.on('error', (err) => reject(err));
+    });
+  }
+
   if (Buffer.isBuffer(req.body)) {
     return req.body;
   }
   if (typeof req.body === 'string') {
     return Buffer.from(req.body, 'utf8');
   }
-
-  return new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-
-    req.on('data', (chunk: Buffer | string) => {
-      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      totalBytes += buf.length;
-      if (totalBytes > MAX_BODY_BYTES) {
-        reject(new Error('PAYLOAD_TOO_LARGE'));
-        req.destroy();
-        return;
-      }
-      chunks.push(buf);
-    });
-
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', (err) => reject(err));
-  });
+  if (req.body && typeof req.body === 'object') {
+    return Buffer.from(JSON.stringify(req.body), 'utf8');
+  }
+  return Buffer.alloc(0);
 }
 
 export function getHeaderValue(req: IncomingMessage, name: string): string | undefined {
@@ -187,14 +189,21 @@ export async function handleMetaWebhookPost(
   }
 
   const results: Array<{ status: string; psid?: string }> = [];
-  for (const entry of payload.entry) {
-    if (!Array.isArray(entry.messaging)) continue;
-    for (const event of entry.messaging) {
-      try {
-        const outcome = await processIncomingMetaEvent(event);
-        results.push(outcome);
-      } catch (err) {
-        console.error('Meta webhook event processing error:', err);
+  const hasMessagingEvents = payload.entry.some(
+    (entry) => Array.isArray(entry.messaging) && entry.messaging.length > 0
+  );
+
+  if (hasMessagingEvents) {
+    const { processIncomingMetaEvent } = await import('./metaMessenger.js');
+    for (const entry of payload.entry) {
+      if (!Array.isArray(entry.messaging)) continue;
+      for (const event of entry.messaging) {
+        try {
+          const outcome = await processIncomingMetaEvent(event);
+          results.push(outcome);
+        } catch (err) {
+          console.error('Meta webhook event processing error:', err);
+        }
       }
     }
   }
@@ -228,6 +237,7 @@ export async function authenticateFirebaseRequest(
   }
 
   try {
+    const { verifyFirebaseBearerToken } = await import('./firebaseAdmin.js');
     const decoded = await verifyFirebaseBearerToken(token);
     if (!decoded.email_verified) {
       sendJson(res, 403, {
@@ -241,7 +251,8 @@ export async function authenticateFirebaseRequest(
       email: decoded.email,
       emailVerified: Boolean(decoded.email_verified),
     };
-  } catch {
+  } catch (err) {
+    console.error('Firebase auth verification error:', err);
     sendJson(res, 401, {
       error: 'Unauthorized',
       message: 'Invalid or expired Firebase ID token.',
@@ -308,6 +319,10 @@ export async function handleMessengerSend(
   }
 
   try {
+    const [{ sendMetaMessengerMessage }, { getAdminFirestore }] = await Promise.all([
+      import('./metaMessenger.js'),
+      import('./firebaseAdmin.js'),
+    ]);
     const sent = await sendMetaMessengerMessage({ recipientPsid, text });
     const nowIso = new Date().toISOString();
     const db = getAdminFirestore();

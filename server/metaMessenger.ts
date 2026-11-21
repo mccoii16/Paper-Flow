@@ -1,7 +1,7 @@
-import { getAdminFirestore } from './firebaseAdmin';
+import { getAdminFirestore } from './firebaseAdmin.js';
 import {
   buildSimulatedAutoReply,
-} from '../src/utils/automationEngine';
+} from '../src/utils/automationEngine.js';
 import type {
   AutomationLog,
   Booking,
@@ -11,12 +11,12 @@ import type {
   Message,
   Workflow,
   WorkspaceProfile,
-} from '../src/types/paperflow';
+} from '../src/types/paperflow.js';
 import {
   buildWebhookDedupKey,
   evaluateWebhookSafeguards,
   type MetaMessagingEvent,
-} from './webhookSafeguards';
+} from './webhookSafeguards.js';
 
 const RECENT_DEDUP_CACHE = new Map<string, number>();
 const RECENT_AUTOREPLY_BY_PSID = new Map<string, number>();

@@ -6,7 +6,7 @@ import type {
   LeadStatus,
   Workflow,
   WorkflowNode,
-} from '../types/paperflow';
+} from '../types/paperflow.js';
 
 export interface KnowledgeMatchResult {
   item: KnowledgeBaseItem;

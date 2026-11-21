@@ -103,6 +103,29 @@ export async function connectGoogleCalendar(): Promise<{
       accessToken: cachedAccessToken,
       email: cachedAccountEmail,
     };
+  } catch (err: unknown) {
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : '';
+    if (code === 'auth/unauthorized-domain') {
+      const currentHost =
+        typeof window !== 'undefined' && window.location?.hostname
+          ? window.location.hostname
+          : 'this domain';
+      throw new Error(
+        `Domain "${currentHost}" is not authorized in Firebase project "${calendarOAuthConfig.projectId}". Add "${currentHost}" under Firebase Console → ${calendarOAuthConfig.projectId} → Authentication → Settings → Authorized domains, wait ~30 seconds, and refresh.`
+      );
+    }
+    if (code === 'auth/popup-blocked') {
+      throw new Error(
+        'Your browser blocked the Google sign-in popup. Please allow popups for this site and try again.'
+      );
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      throw new Error('Google sign-in was closed before finishing. Click Sign in with Google to try again.');
+    }
+    throw err;
   } finally {
     isConnecting = false;
   }

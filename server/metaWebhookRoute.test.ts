@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import metaWebhookHandler, { config as metaWebhookConfig } from '../api/webhooks/meta';
-import healthHandler from '../api/health';
+import metaWebhookHandler, { config as metaWebhookConfig } from '../api/webhooks/meta.js';
+import healthHandler from '../api/health.js';
 
 async function withServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>,
@@ -169,3 +169,33 @@ test('vercel.json SPA rewrite excludes /api/* endpoints and includes firebase-ap
   assert.equal(regex.test('/inbox'), true);
   assert.equal(regex.test('/settings'), true);
 });
+
+test('TypeScript configs isolate vite/client to frontend while api/ and server/ use Node types', () => {
+  const readJson = (rel: string) =>
+    JSON.parse(fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8')) as {
+      compilerOptions?: { types?: string[]; moduleResolution?: string; module?: string };
+      references?: Array<{ path: string }>;
+    };
+
+  const rootTs = readJson('tsconfig.json');
+  const appTs = readJson('tsconfig.app.json');
+  const serverTs = readJson('tsconfig.server.json');
+  const apiTs = readJson('api/tsconfig.json');
+  const viteEnv = fs.readFileSync(path.resolve(process.cwd(), 'src/vite-env.d.ts'), 'utf8');
+
+  // Root tsconfig must not leak vite/client into backend/serverless compilation
+  assert.equal(rootTs.compilerOptions?.types?.includes('vite/client') ?? false, false);
+  assert.ok(rootTs.references?.some((r) => r.path === './tsconfig.app.json'));
+  assert.ok(rootTs.references?.some((r) => r.path === './tsconfig.server.json'));
+
+  // Frontend retains vite/client for import.meta.env
+  assert.ok(appTs.compilerOptions?.types?.includes('vite/client'));
+  assert.match(viteEnv, /\/\/\/\s*<reference\s+types="vite\/client"\s*\/>/);
+
+  // Backend and Vercel API functions strictly use Node types + NodeNext ESM
+  assert.deepEqual(serverTs.compilerOptions?.types, ['node']);
+  assert.equal(serverTs.compilerOptions?.moduleResolution, 'NodeNext');
+  assert.deepEqual(apiTs.compilerOptions?.types, ['node']);
+  assert.equal(apiTs.compilerOptions?.moduleResolution, 'NodeNext');
+});
+

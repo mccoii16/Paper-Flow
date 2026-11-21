@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": [
+    "api/**/*.ts",
+    "server/**/*.ts",
+    "server.ts",
+    "vite.config.ts",
+    "firestore.rules.test.ts",
+    "src/**/*.test.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

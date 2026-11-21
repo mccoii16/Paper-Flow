@@ -5,7 +5,7 @@ import {
   buildWebhookDedupKey,
   evaluateWebhookSafeguards,
   verifyMetaSignature,
-} from './webhookSafeguards';
+} from './webhookSafeguards.js';
 
 test('verifyMetaSignature accepts valid sha256 HMAC and rejects tampered body', () => {
   const secret = 'test_meta_app_secret_123';

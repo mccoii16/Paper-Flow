@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "..",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "./**/*.ts",
+    "../server/**/*.ts",
+    "../src/services/firebaseBlueprint.ts",
+    "../src/utils/automationEngine.ts",
+    "../src/types/paperflow.ts"
+  ],
+  "exclude": [
+    "../server/**/*.test.ts",
+    "../dist",
+    "../node_modules"
+  ]
+}

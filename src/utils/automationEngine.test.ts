@@ -6,14 +6,14 @@ import {
   formatCsvReport,
   matchKnowledgeBase,
   simulateWorkflowRun,
-} from './automationEngine';
+} from './automationEngine.js';
 import {
   DEMO_BOOKINGS,
   DEMO_CONVERSATIONS,
   DEMO_KNOWLEDGE_BASE,
   DEMO_LEADS,
   DEMO_WORKFLOWS,
-} from '../data/demoSeed';
+} from '../data/demoSeed.js';
 
 test('matchKnowledgeBase matches Luxe Mirror Booth pricing inquiry', () => {
   const match = matchKnowledgeBase(

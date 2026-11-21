@@ -7,7 +7,7 @@ import {
   DEFAULT_STUDIO_WORKSPACE_ID,
   FIRESTORE_COLLECTIONS,
   resolveWorkspaceIdForUser,
-} from './src/services/firebaseBlueprint';
+} from './src/services/firebaseBlueprint.js';
 
 const RULES_PATH = path.resolve(process.cwd(), 'firestore.rules');
 const rulesText = fs.readFileSync(RULES_PATH, 'utf8');

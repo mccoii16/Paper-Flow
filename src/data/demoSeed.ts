@@ -7,7 +7,7 @@ import type {
   Workflow,
   WorkspaceProfile,
   WorkspaceSnapshot,
-} from '../types/paperflow';
+} from '../types/paperflow.js';
 
 export const DEFAULT_OPERATOR_SESSION: OperatorSession = {
   uid: 'op-paperdreams-01',

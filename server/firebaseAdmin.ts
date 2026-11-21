@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getApp, getApps, initializeApp } from 'firebase-admin/app';
+import { fileURLToPath } from 'node:url';
+import { cert, getApp, getApps, initializeApp, type ServiceAccount } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
@@ -10,21 +11,52 @@ interface FirebaseAppletConfig {
 }
 
 function loadFirebaseAppletConfig(): FirebaseAppletConfig | null {
+  const candidates = [
+    path.resolve(process.cwd(), 'firebase-applet-config.json'),
+  ];
+
   try {
-    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) return null;
-    const raw = fs.readFileSync(configPath, 'utf-8');
-    const parsed = JSON.parse(raw) as FirebaseAppletConfig;
-    if (!parsed.projectId || parsed.projectId === 'remixed-project-id') {
-      return null;
-    }
-    return parsed;
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    candidates.push(path.resolve(currentDir, '..', 'firebase-applet-config.json'));
   } catch {
-    return null;
+    // Ignore when bundled into CJS or non-file URL
   }
+
+  for (const configPath of candidates) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const raw = fs.readFileSync(configPath, 'utf-8');
+      const parsed = JSON.parse(raw) as FirebaseAppletConfig;
+      if (parsed.projectId && parsed.projectId !== 'remixed-project-id') {
+        return parsed;
+      }
+    } catch {
+      // Try next candidate
+    }
+  }
+
+  if (process.env.FIREBASE_PROJECT_ID) {
+    return {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      firestoreDatabaseId: process.env.FIREBASE_DATABASE_ID,
+    };
+  }
+
+  return null;
 }
 
 const config = loadFirebaseAppletConfig();
+
+function parseServiceAccountFromEnv(): ServiceAccount | null {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ServiceAccount;
+    return parsed;
+  } catch {
+    throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT_JSON environment variable.');
+  }
+}
 
 function getOrInitAdminApp() {
   if (!config) {
@@ -32,6 +64,13 @@ function getOrInitAdminApp() {
   }
   if (getApps().length > 0) {
     return getApp();
+  }
+  const serviceAccount = parseServiceAccountFromEnv();
+  if (serviceAccount) {
+    return initializeApp({
+      credential: cert(serviceAccount),
+      projectId: config.projectId,
+    });
   }
   return initializeApp({
     projectId: config.projectId,

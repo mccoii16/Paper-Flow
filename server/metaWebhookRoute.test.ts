@@ -201,8 +201,14 @@ test('TypeScript configs isolate vite/client to frontend while api/ and server/ 
   // Pin TypeScript to stable 5.9.x so @vercel/node uses local JS Compiler API
   const pkgJson = JSON.parse(
     fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')
-  ) as { devDependencies?: Record<string, string> };
+  ) as {
+    devDependencies?: Record<string, string>;
+    engines?: Record<string, string>;
+    overrides?: Record<string, Record<string, string>>;
+  };
   assert.match(pkgJson.devDependencies?.typescript ?? '', /^~?5\.9\./);
   assert.ok(pkgJson.devDependencies?.['@types/node']);
+  assert.equal(pkgJson.engines?.node, '22.x');
+  assert.equal(pkgJson.overrides?.['jwks-rsa']?.jose, '5.10.0');
 });
 

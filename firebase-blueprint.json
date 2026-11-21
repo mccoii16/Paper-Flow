@@ -158,7 +158,11 @@
         "totalPhp": { "type": "number" },
         "depositPaidPhp": { "type": "number" },
         "status": { "type": "string", "enum": ["Pending Deposit", "Confirmed", "Completed", "Cancelled"] },
-        "notes": { "type": "string", "maxLength": 2000 }
+        "notes": { "type": "string", "maxLength": 2000 },
+        "googleEventId": { "type": "string", "maxLength": 200 },
+        "googleCalendarId": { "type": "string", "maxLength": 200 },
+        "googleCalendarName": { "type": "string", "maxLength": 160 },
+        "importedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["ownerUid", "clientName", "eventTitle", "packageName", "status"]
     },

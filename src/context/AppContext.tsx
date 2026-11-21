@@ -34,6 +34,10 @@ import {
   setDemoModePreferred,
   writeDemoWorkspace,
 } from '../services/repository';
+import {
+  clearGoogleCalendarToken,
+  disconnectGoogleCalendar,
+} from '../services/googleCalendarAuth';
 import { buildSimulatedAutoReply } from '../utils/automationEngine';
 
 interface ToastNotification {
@@ -93,6 +97,9 @@ interface AppContextValue {
   deleteLead: (leadId: string) => Promise<void>;
   // Bookings CRUD
   upsertBooking: (booking: Booking) => Promise<void>;
+  importBookingsBatch: (
+    bookings: Booking[]
+  ) => Promise<{ created: number; updated: number; failed: number }>;
   deleteBooking: (bookingId: string) => Promise<void>;
   // Knowledge Base CRUD
   upsertKnowledgeItem: (item: KnowledgeBaseItem) => Promise<void>;
@@ -223,8 +230,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           signedInAt: new Date().toISOString(),
         });
       } else if (isDemoModePreferred()) {
+        clearGoogleCalendarToken();
         setSession(DEFAULT_OPERATOR_SESSION);
       } else {
+        clearGoogleCalendarToken();
         setSession(null);
       }
       setAuthReady(true);
@@ -350,6 +359,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     setDemoModePreferred(false);
+    await disconnectGoogleCalendar();
     if (auth.currentUser) {
       await firebaseSignOut(auth);
     }
@@ -1015,6 +1025,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [session, isDemoMode, updateDemoWorkspace, notify]
   );
 
+  const importBookingsBatch = useCallback(
+    async (
+      bookings: Booking[]
+    ): Promise<{ created: number; updated: number; failed: number }> => {
+      if (!session || bookings.length === 0) {
+        return { created: 0, updated: 0, failed: 0 };
+      }
+
+      const existingIds = new Set(workspace.bookings.map((b) => b.id));
+      let created = 0;
+      let updated = 0;
+      let failed = 0;
+
+      if (isDemoMode) {
+        const incomingById = new Map<string, Booking>();
+        for (const bk of bookings) {
+          if (existingIds.has(bk.id)) {
+            updated += 1;
+          } else {
+            created += 1;
+          }
+          incomingById.set(bk.id, bk);
+        }
+
+        updateDemoWorkspace((prev) => {
+          const updatedExisting = prev.bookings.map((b) => incomingById.get(b.id) ?? b);
+          const brandNew = bookings.filter((b) => !existingIds.has(b.id));
+          return {
+            ...prev,
+            bookings: [...brandNew, ...updatedExisting],
+          };
+        });
+      } else {
+        for (const bk of bookings) {
+          try {
+            await paperflowRepository.saveBooking(session, bk);
+            if (existingIds.has(bk.id)) {
+              updated += 1;
+            } else {
+              created += 1;
+              existingIds.add(bk.id);
+            }
+          } catch (err) {
+            failed += 1;
+            console.warn('Failed to import calendar booking:', bk.eventTitle, err);
+          }
+        }
+      }
+
+      const totalSaved = created + updated;
+      if (totalSaved > 0) {
+        const parts: string[] = [];
+        if (created > 0) parts.push(`${created} new`);
+        if (updated > 0) parts.push(`${updated} updated`);
+        notify(
+          `Imported ${totalSaved} booking${totalSaved === 1 ? '' : 's'} from Google Calendar (${parts.join(', ')})`,
+          'success'
+        );
+      }
+      if (failed > 0) {
+        notify(
+          `${failed} calendar event${failed === 1 ? '' : 's'} could not be saved.`,
+          'warning'
+        );
+      }
+
+      return { created, updated, failed };
+    },
+    [session, workspace.bookings, isDemoMode, updateDemoWorkspace, notify]
+  );
+
   const deleteBooking = useCallback(
     async (bookingId: string) => {
       if (!session) return;
@@ -1141,6 +1222,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         upsertLead,
         deleteLead,
         upsertBooking,
+        importBookingsBatch,
         deleteBooking,
         upsertKnowledgeItem,
         deleteKnowledgeItem,

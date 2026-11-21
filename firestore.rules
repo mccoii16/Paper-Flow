@@ -202,7 +202,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           'ownerUid', 'leadId', 'clientName', 'eventTitle', 'packageName',
           'eventDate', 'eventTime', 'venue', 'totalPhp', 'depositPaidPhp',
-          'status', 'notes'
+          'status', 'notes', 'googleEventId', 'googleCalendarId',
+          'googleCalendarName', 'importedAt'
         ]) &&
         isStringBounded(data.ownerUid, 1, 128) &&
         isStringBounded(data.clientName, 1, 120) &&
@@ -215,7 +216,11 @@ service cloud.firestore {
         (!('venue' in data) || isStringBounded(data.venue, 0, 200)) &&
         (!('totalPhp' in data) || (data.totalPhp is number && data.totalPhp >= 0)) &&
         (!('depositPaidPhp' in data) || (data.depositPaidPhp is number && data.depositPaidPhp >= 0)) &&
-        (!('notes' in data) || isStringBounded(data.notes, 0, 2000));
+        (!('notes' in data) || isStringBounded(data.notes, 0, 2000)) &&
+        (!('googleEventId' in data) || isStringBounded(data.googleEventId, 0, 200)) &&
+        (!('googleCalendarId' in data) || isStringBounded(data.googleCalendarId, 0, 200)) &&
+        (!('googleCalendarName' in data) || isStringBounded(data.googleCalendarName, 0, 160)) &&
+        (!('importedAt' in data) || isStringBounded(data.importedAt, 0, 64));
     }
 
     function isValidKnowledgeItem(data) {
@@ -415,7 +420,8 @@ service cloud.firestore {
           (isBootstrappedAdmin() || !(existing().status in ['Completed', 'Cancelled'])) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
             'leadId', 'clientName', 'eventTitle', 'packageName', 'eventDate',
-            'eventTime', 'venue', 'totalPhp', 'depositPaidPhp', 'status', 'notes'
+            'eventTime', 'venue', 'totalPhp', 'depositPaidPhp', 'status', 'notes',
+            'googleEventId', 'googleCalendarId', 'googleCalendarName', 'importedAt'
           ]);
         allow delete: if isVerifiedUser() && isValidId(workspaceId) && isValidId(bookingId) &&
           (isBootstrappedAdmin() || existing().ownerUid == request.auth.uid);

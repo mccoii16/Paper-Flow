@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Edit3, List, Plus, Trash2, X } from 'lucide-react';
+import { Calendar, CalendarPlus, Edit3, List, Plus, Trash2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { Booking, BookingStatus } from '../../types/paperflow';
 import { BookingStatusText, formatPhp, formatShortDate } from '../Common/StatusLabel';
+import { GoogleCalendarImportModal } from './GoogleCalendarImportModal';
 
 const BOOKING_STATUSES: Array<'All' | BookingStatus> = [
   'All',
@@ -29,10 +30,11 @@ function createBlankBooking(defaultPackage: string): Booking {
 }
 
 export function BookingsPage() {
-  const { workspace, upsertBooking, deleteBooking } = useApp();
+  const { workspace, session, upsertBooking, importBookingsBatch, deleteBooking } = useApp();
   const [viewMode, setViewMode] = useState<'table' | 'timeline'>('table');
   const [statusFilter, setStatusFilter] = useState<'All' | BookingStatus>('All');
   const [editing, setEditing] = useState<Booking | null>(null);
+  const [showCalendarImport, setShowCalendarImport] = useState(false);
 
   const packageNames = useMemo(
     () =>
@@ -106,7 +108,7 @@ export function BookingsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <div className="flex items-center gap-1 p-1 rounded-xl bg-[#EFEBF3] dark:bg-slate-900">
             <button
               type="button"
@@ -133,6 +135,15 @@ export function BookingsPage() {
               <span>Timeline</span>
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowCalendarImport(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#E7E4ED] dark:border-slate-700 bg-white hover:bg-[#FAF8FB] dark:bg-[#131C31] dark:hover:bg-slate-800 text-[#0F172A] dark:text-white text-xs font-semibold whitespace-nowrap transition-colors"
+          >
+            <CalendarPlus className="h-4 w-4 text-pink-600 dark:text-pink-400" aria-hidden="true" />
+            <span>Import from Google Calendar</span>
+          </button>
 
           <button
             type="button"
@@ -175,7 +186,21 @@ export function BookingsPage() {
                       <div className="font-semibold text-sm text-[#0F172A] dark:text-white">
                         {bk.eventTitle}
                       </div>
-                      <div className="text-slate-500 dark:text-slate-400 mt-0.5">{bk.clientName}</div>
+                      <div className="text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <span>{bk.clientName}</span>
+                        {bk.googleEventId && (
+                          <span
+                            title={
+                              bk.googleCalendarName
+                                ? `Imported from ${bk.googleCalendarName}`
+                                : 'Imported from Google Calendar'
+                            }
+                            className="inline-flex items-center gap-1 text-[10px] font-medium text-pink-700 dark:text-pink-300"
+                          >
+                            · Google Calendar
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200">{bk.packageName}</td>
                     <td className="py-3.5 px-4">
@@ -241,7 +266,10 @@ export function BookingsPage() {
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                   {bk.clientName} · {bk.venue}
                 </p>
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{bk.packageName}</p>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {bk.packageName}
+                  {bk.googleEventId ? ' · Google Calendar' : ''}
+                </p>
               </div>
               <div className="pt-3 border-t border-[#EFEBF3] dark:border-slate-800 flex items-center justify-between text-xs">
                 <span className="font-mono tabular-nums font-semibold text-[#0F172A] dark:text-white">
@@ -428,6 +456,20 @@ export function BookingsPage() {
                 </div>
               </div>
 
+              <div>
+                <label htmlFor="bk-notes" className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Event Notes
+                </label>
+                <textarea
+                  id="bk-notes"
+                  rows={3}
+                  value={editing.notes}
+                  onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                  placeholder="Call time details, backdrop notes, or imported calendar description..."
+                  className="w-full rounded-xl border border-[#E7E4ED] dark:border-slate-700 bg-[#FAF8FB] dark:bg-[#0B1120] px-3 py-2 text-sm resize-y"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -447,6 +489,18 @@ export function BookingsPage() {
           </div>
         </div>
       )}
+
+      {/* Google Calendar Import Modal */}
+      <GoogleCalendarImportModal
+        isOpen={showCalendarImport}
+        onClose={() => setShowCalendarImport(false)}
+        existingBookings={workspace.bookings}
+        packageNames={packageNames}
+        studioEmail={
+          session?.authProvider === 'firebase-google' ? session.email : undefined
+        }
+        onImportBookings={importBookingsBatch}
+      />
     </div>
   );
 }

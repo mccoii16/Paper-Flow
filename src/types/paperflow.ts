@@ -174,6 +174,10 @@ export interface Booking {
   depositPaidPhp: number;
   status: BookingStatus;
   notes: string;
+  googleEventId?: string;
+  googleCalendarId?: string;
+  googleCalendarName?: string;
+  importedAt?: string;
 }
 
 export type KnowledgeCategory = 'packages' | 'faqs' | 'services' | 'policies';

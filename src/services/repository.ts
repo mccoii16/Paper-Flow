@@ -701,6 +701,10 @@ export const paperflowRepository = {
         depositPaidPhp: booking.depositPaidPhp,
         status: booking.status,
         notes: booking.notes.slice(0, 2000),
+        googleEventId: booking.googleEventId?.slice(0, 200),
+        googleCalendarId: booking.googleCalendarId?.slice(0, 200),
+        googleCalendarName: booking.googleCalendarName?.slice(0, 160),
+        importedAt: booking.importedAt?.slice(0, 64),
       });
       if (snap.exists()) {
         await updateDoc(ref, payload);
